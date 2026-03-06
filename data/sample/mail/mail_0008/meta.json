@@ -1,0 +1,15 @@
+{
+  "mail_id": "MAIL-0008",
+  "entry_id": "00000008",
+  "mailbox_address": "shinsa@example.org",
+  "folder_path": "受信トレイ/交付金申請",
+  "received_at": "2024-05-08T15:30:00+09:00",
+  "sender_name": "加藤 翔太",
+  "sender_email": "kato@green-energy-tohoku.co.jp",
+  "subject": "交付金の申請について（グリーンエナジー東北）",
+  "body_path": "body.txt",
+  "msg_path": "",
+  "attachments": [
+    { "path": "application.pdf" }
+  ]
+}

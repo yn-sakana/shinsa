@@ -1,13 +1,16 @@
 {
-    "mail_id": "MAIL-0002",
-    "entry_id": "ENTRY-0002",
-    "mailbox_address": "grants@example.org",
-    "folder_path": "Inbox/Grant Applications",
-    "received_at": "2026-03-05T14:22:00+09:00",
-    "sender_name": "Taro Yamada",
-    "sender_email": "taro@example.org",
-    "subject": "Application documents for review",
-    "body_path": "body.txt",
-    "msg_path": "",
-    "attachment_paths": ["registration.pdf"]
+  "mail_id": "MAIL-0002",
+  "entry_id": "00000002",
+  "mailbox_address": "shinsa@example.org",
+  "folder_path": "受信トレイ/交付金申請",
+  "received_at": "2024-04-18T14:05:00+09:00",
+  "sender_name": "佐藤 花子",
+  "sender_email": "sato@kodomo-mirai.org",
+  "subject": "交付金申請書類の送付（子ども未来サポート）",
+  "body_path": "body.txt",
+  "msg_path": "",
+  "attachments": [
+    { "path": "application.pdf" },
+    { "path": "articles.pdf" }
+  ]
 }

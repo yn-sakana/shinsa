@@ -8,30 +8,44 @@ $ErrorActionPreference = 'Stop'
 $config = Get-ShinsaConfig -ScriptPath $MyInvocation.MyCommand.Path
 $paths = Get-ShinsaDataPaths -Config $config
 
-$plan = Get-ShinsaTableWritebackPlan -Config $config -Paths $paths
+$sourceNames = Get-ShinsaSourceNames -Config $config
+$totalCases = 0
 
-if ($plan.case_count -eq 0) {
-    Write-Host 'writeback skipped: no table changes.' -ForegroundColor Yellow
-    return
-}
+foreach ($name in $sourceNames) {
+    $src = $config.sources[$name]
+    if ($null -eq $src.editable_columns -or @($src.editable_columns).Count -eq 0) { continue }
 
-Write-Host ''
-Write-Host 'pending writeback' -ForegroundColor Cyan
-foreach ($change in @($plan.changes)) {
-    $fields = @($change.changes.PSObject.Properties.Name) -join ', '
-    Write-Host ("  {0}: {1}" -f $change.case_id, $fields)
-}
-Write-Host ("  total : {0} cases / {1} fields" -f $plan.case_count, $plan.change_count)
+    $plan = Get-ShinsaWritebackPlan -Config $config -Paths $paths -SourceName $name
 
-if (-not $Force) {
-    $answer = Read-Host 'write changes back to the source table? [y/N]'
-    if ($answer -notmatch '^(?i)y(es)?$') {
-        Write-Host 'writeback cancelled.' -ForegroundColor Yellow
-        return
+    if ($plan.case_count -eq 0) { continue }
+
+    Write-Host ''
+    Write-Host ("pending writeback: {0}" -f $name) -ForegroundColor Cyan
+    foreach ($change in @($plan.changes)) {
+        $fields = @($change.changes.PSObject.Properties.Name) -join ', '
+        Write-Host ("  {0}: {1}" -f $change.key_value, $fields)
     }
+    Write-Host ("  total: {0} records / {1} fields" -f $plan.case_count, $plan.change_count)
+
+    if (-not $Force) {
+        $answer = Read-Host "write changes back to '$name'? [y/N]"
+        if ($answer -notmatch '^(?i)y(es)?$') {
+            Write-Host 'skipped.' -ForegroundColor Yellow
+            continue
+        }
+    }
+
+    Invoke-ShinsaWriteback -Config $config -SourceName $name -Plan $plan
+
+    $sourcePath = Get-ShinsaSourcePath -Config $config -SourceName $name
+    $refreshed = @(Import-ShinsaFieldsRecords -SourceConfig $src -SourcePath $sourcePath)
+    $jsonPath = Join-Path $paths.JsonRoot $src.file
+    Write-ShinsaJson -Path $jsonPath -Data $refreshed
+
+    Write-Host ("writeback completed: {0}" -f $name) -ForegroundColor Green
+    $totalCases += $plan.case_count
 }
 
-Invoke-ShinsaTableWriteback -Config $config -Paths $paths -Plan $plan
-Write-ShinsaJson -Path $paths.TableJsonPath -Data @(Import-ShinsaTableRecords -Config $config -Paths $paths | Sort-Object case_id)
-
-Write-Host 'writeback completed.' -ForegroundColor Green
+if ($totalCases -eq 0) {
+    Write-Host 'writeback skipped: no changes.' -ForegroundColor Yellow
+}

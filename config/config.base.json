@@ -4,61 +4,171 @@
     "shell_prompt": "shinsa"
   },
   "paths": {
-    "mail_archive_root": "",
-    "sharepoint_table_path": "",
-    "sharepoint_case_root": "",
     "json_root": "data/local/json"
   },
   "mail": {
     "self_address": ""
   },
-  "table": {
-    "key_column": "case_id",
-    "sheet_name": "",
-    "header_row": 1,
-    "columns": {
-      "case_id": "case_id",
-      "receipt_no": "receipt_no",
-      "organization_name": "organization_name",
-      "contact_name": "contact_name",
-      "contact_email": "contact_email",
-      "status": "status",
-      "assigned_to": "assigned_to",
-      "missing_documents": "missing_documents",
-      "review_note_public": "review_note_public"
-    }
-  },
-  "sources": [
-    {
-      "name": "table",
-      "file": "table.json",
+  "sources": {
+    "anken": {
+      "file": "anken.json",
+      "source_path": "",
+      "source_table": "",
+      "key_column": "基本_案件ID",
+      "columns": {
+        "基本_案件ID": "基本_案件ID",
+        "基本_受付番号": "基本_受付番号",
+        "基本_団体名": "基本_団体名",
+        "基本_分類": "基本_分類",
+        "基本_受付日": "基本_受付日",
+        "基本_締切日": "基本_締切日",
+        "基本_ステータス": "基本_ステータス",
+        "基本_担当者": "基本_担当者",
+        "基本_優先度": "基本_優先度",
+        "申請者_団体種別": "申請者_団体種別",
+        "申請者_代表者名": "申請者_代表者名",
+        "申請者_代表者役職": "申請者_代表者役職",
+        "申請者_担当者名": "申請者_担当者名",
+        "申請者_担当者メール": "申請者_担当者メール",
+        "申請者_担当者電話": "申請者_担当者電話",
+        "申請者_担当者FAX": "申請者_担当者FAX",
+        "申請者_郵便番号": "申請者_郵便番号",
+        "申請者_住所": "申請者_住所",
+        "申請者_設立年月日": "申請者_設立年月日",
+        "申請者_法人番号": "申請者_法人番号",
+        "事業_事業名": "事業_事業名",
+        "事業_開始日": "事業_開始日",
+        "事業_終了日": "事業_終了日",
+        "事業_実施場所": "事業_実施場所",
+        "事業_対象者": "事業_対象者",
+        "事業_参加予定人数": "事業_参加予定人数",
+        "事業_概要": "事業_概要",
+        "金額_総事業費": "金額_総事業費",
+        "金額_申請額": "金額_申請額",
+        "金額_自己負担額": "金額_自己負担額",
+        "金額_補助率": "金額_補助率",
+        "金額_人件費": "金額_人件費",
+        "金額_賃金": "金額_賃金",
+        "金額_報償費": "金額_報償費",
+        "金額_旅費": "金額_旅費",
+        "金額_需用費_消耗品費": "金額_需用費_消耗品費",
+        "金額_需用費_印刷製本費": "金額_需用費_印刷製本費",
+        "金額_役務費_通信運搬費": "金額_役務費_通信運搬費",
+        "金額_役務費_手数料": "金額_役務費_手数料",
+        "金額_委託費": "金額_委託費",
+        "金額_使用料及び賃借料": "金額_使用料及び賃借料",
+        "金額_備品購入費": "金額_備品購入費",
+        "金額_その他": "金額_その他",
+        "金額_承認額": "金額_承認額",
+        "金額_減額理由": "金額_減額理由",
+        "審査_一次審査日": "審査_一次審査日",
+        "審査_一次審査結果": "審査_一次審査結果",
+        "審査_二次審査日": "審査_二次審査日",
+        "審査_二次審査結果": "審査_二次審査結果",
+        "審査_審査スコア": "審査_審査スコア",
+        "審査_審査員1": "審査_審査員1",
+        "審査_審査員2": "審査_審査員2",
+        "審査_審査員3": "審査_審査員3",
+        "審査_書類チェック": "審査_書類チェック",
+        "審査_書類不備": "審査_書類不備",
+        "審査_不備通知日": "審査_不備通知日",
+        "審査_不備回答期限": "審査_不備回答期限",
+        "審査_不備回答日": "審査_不備回答日",
+        "審査_公開メモ": "審査_公開メモ",
+        "審査_内部メモ": "審査_内部メモ",
+        "審査_指摘事項": "審査_指摘事項",
+        "実績_中間報告期限": "実績_中間報告期限",
+        "実績_中間報告日": "実績_中間報告日",
+        "実績_中間報告確認": "実績_中間報告確認",
+        "実績_最終報告期限": "実績_最終報告期限",
+        "実績_最終報告日": "実績_最終報告日",
+        "実績_実支出額": "実績_実支出額",
+        "実績_確定額": "実績_確定額",
+        "実績_返還額": "実績_返還額",
+        "実績_精算状況": "実績_精算状況",
+        "実績_成果概要": "実績_成果概要",
+        "通知_交付決定通知日": "通知_交付決定通知日",
+        "通知_交付決定番号": "通知_交付決定番号",
+        "通知_交付条件": "通知_交付条件",
+        "通知_変更届受理日": "通知_変更届受理日",
+        "通知_変更内容": "通知_変更内容",
+        "通知_確定通知日": "通知_確定通知日",
+        "通知_確定通知番号": "通知_確定通知番号",
+        "通知_備考": "通知_備考"
+      },
       "view": "fields",
-      "display_columns": ["case_id", "organization_name", "status"],
-      "detail_columns": ["case_id", "receipt_no", "organization_name", "contact_name", "contact_email", "status", "assigned_to", "missing_documents", "review_note_public"],
-      "editable_columns": ["status", "assigned_to", "missing_documents", "review_note_public"],
-      "multiline_columns": ["missing_documents", "review_note_public"]
+      "display_columns": ["基本_案件ID", "基本_団体名", "基本_ステータス", "基本_担当者"],
+      "multiline_columns": ["審査_書類不備", "審査_公開メモ", "審査_内部メモ", "審査_指摘事項", "実績_成果概要", "事業_概要", "通知_備考", "通知_交付条件", "通知_変更内容", "金額_減額理由"]
     },
-    {
-      "name": "mail",
+    "contacts": {
+      "file": "contacts.json",
+      "source_path": "",
+      "source_table": "",
+      "key_column": "contact_id",
+      "columns": {
+        "contact_id": "contact_id",
+        "name": "name",
+        "organization": "organization",
+        "department": "department",
+        "position": "position",
+        "email": "email",
+        "phone": "phone",
+        "fax": "fax",
+        "address": "address",
+        "last_contact_date": "last_contact_date",
+        "notes": "notes"
+      },
+      "view": "fields",
+      "display_columns": ["contact_id", "name", "organization", "email"],
+      "multiline_columns": ["notes"]
+    },
+    "kenshu": {
+      "file": "kenshu.json",
+      "source_path": "",
+      "source_table": "",
+      "key_column": "training_id",
+      "columns": {
+        "training_id": "training_id",
+        "training_name": "training_name",
+        "instructor": "instructor",
+        "scheduled_date": "scheduled_date",
+        "venue": "venue",
+        "capacity": "capacity",
+        "enrolled": "enrolled",
+        "status": "status",
+        "remarks": "remarks"
+      },
+      "view": "fields",
+      "display_columns": ["training_id", "training_name", "scheduled_date", "status"],
+      "multiline_columns": ["remarks"]
+    },
+    "mail": {
       "file": "mails.json",
+      "source_path": "",
       "view": "mail",
-      "display_columns": ["received_at", "sender_email", "subject"]
+      "display_columns": ["received_at", "sender_email", "subject"],
+      "join": { "source": "anken", "local_key": "sender_email", "foreign_key": "申請者_担当者メール", "match_mode": "exact" }
     },
-    {
-      "name": "folder",
+    "folder": {
       "file": "folders.json",
+      "source_path": "",
       "view": "tree",
       "display_columns": ["file_name"],
       "tree_group_key": "folder_path",
       "tree_relative_path": "relative_path",
-      "tree_full_path": "file_path"
+      "tree_full_path": "file_path",
+      "join": { "source": "anken", "local_key": "case_id", "foreign_key": "基本_案件ID" }
     }
-  ],
+  },
+  "sync": {
+    "auto_sync": true,
+    "interval_ms": 5000
+  },
   "gui": {
     "title": "shinsa",
     "font_name": "Yu Gothic UI",
     "font_size": 10,
-    "window_width": 1024,
-    "window_height": 640
+    "window_width": 1100,
+    "window_height": 700
   }
 }

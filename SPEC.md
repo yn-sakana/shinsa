@@ -1,11 +1,12 @@
-﻿# shinsa 仕様書
+# shinsa 仕様書
 
 ## 1. 目的
 
 - Outlook で受信した申請メールと添付をローカルに保存する
 - SharePoint 上の案件台帳と案件フォルダは OneDrive 同期済みローカルを通じて扱う
 - 正本を直接の作業場にせず、ローカルに JSON 化したデータを GUI で閲覧・編集する
-- 正本への反映は bridge 処理で明示的に行う
+- 正本との同期はリアルタイムで自動的に行う
+- 競合が発生した場合はダイアログで解決する
 
 ## 2. 基本原則
 
@@ -16,11 +17,11 @@
 - SharePoint へは VBA も PowerShell も直接アクセスしない
 - SharePoint の入口は OneDrive 同期済みローカルパスとする
 - Outlook の入口は Outlook VBA が作るローカル Mail Archive とする
-- `shinsa` は正本を直接編集しない
 - `shinsa` は JSON 化したデータと cache だけを扱う
 - 業務項目は台帳に存在する列だけを扱う
 - GUI が業務列を勝手に増やさない
 - アプリ内でしか使わない状態は `cache.json` にだけ持つ
+- 正本への書き戻し（reflect）は明示操作とする
 
 ## 3. 全体アーキテクチャ
 
@@ -31,34 +32,36 @@ Outlook
   ▼
 Mail Archive
   │
-  │
   ├──────────────┐
   │              │
   ▼              ▼
 SharePoint --OneDrive--> OneDrive同期済みローカル
-                     - 案件台帳
+                     - 案件台帳 (Excel)
                      - 案件フォルダ
 
 Mail Archive + OneDrive同期済みローカル
                     │
                     ▼
                  shinsa
-          - JSON化
+          - JSON化 + スナップショット
+          - 自動同期 (5秒ポーリング)
+          - 3-way merge (競合検知)
           - GUI表示
+          - 編集ログ
           - cache管理
                     │
                     ▼
-      table.json / mails.json / folders.json / cache.json
+      {src}.json / {src}.snapshot.json / changelog.jsonl / cache.json
                     │
                     ▼
-                   GUI
-          - 閲覧
-          - 編集
-          - 正本を開く
+                   GUI (3カラム)
+          - 左: 案件一覧
+          - 中: 詳細・メール・ファイル
+          - 右: 変更ログ
                     │
                     ▼
-          bridge (明示操作のみ)
-      - Excel VBA: 台帳反映
+          reflect (明示操作のみ)
+      - PowerShell: 台帳反映 (EPPlus)
       - Outlook VBA: 下書き作成
       - PowerShell: 案件フォルダ反映
 ```
@@ -72,12 +75,11 @@ Mail Archive + OneDrive同期済みローカル
   - `PowerShell`
 - GUI
   - `WinForms`
+- Excel 読み書き
+  - `EPPlus v4` (LGPL, DLL同梱)
+  - COM 不要・ロックなし・高速
 - Outlook 連携
   - `Outlook VBA`
-- 台帳反映
-  - `Excel VBA`
-- 案件フォルダ反映
-  - `PowerShell`
 - SharePoint 入口
   - `OneDrive 同期済みローカル`
 - データ形式
@@ -95,41 +97,25 @@ Mail Archive + OneDrive同期済みローカル
 - ランチャーは最小に保ち、業務ロジックを持たせない
 - `shinsa.bat` は `powershell.exe -ExecutionPolicy Bypass -File ...` で本体を起動する
 - 利用者は長い引数列を覚える必要がないことを要件とする
+- 外部モジュールのインストールを前提にしない（EPPlus DLLはリポジトリに同梱）
 
 ## 4. 操作モデル
 
 ### 4.1 入口
 
 - 日常の入口は `shinsa.bat` だけとする
-- 起動後は対話型シェルに入る
-- ユーザーは長い引数を毎回打たない
-- 単語 1 つのコマンドで操作する
+- `shinsa.bat` は GUI を直接起動する
 
-### 4.2 対話型シェル
+### 4.2 GUI の責務
 
-- `shinsa>` プロンプトを表示する
-- 想定コマンド
-  - `gui`
-  - `sync`
-  - `status`
-  - `writeback`
-  - `help`
-  - `quit`
-- GUI は別プロセスで起動し、GUI 使用中でもシェル側で別コマンドを打てる
-- シェルは daily driver として使える軽さを優先する
-
-### 4.3 GUI とシェルの役割分担
-
-- シェル
-  - 同期
-  - 状態確認
-  - bridge 起動
-  - 補助操作
-- GUI
-  - 検索
-  - 閲覧
-  - 編集
-  - 正本を開く
+- リアルタイム自動同期（smart sync）
+- 自動保存
+- 検索・閲覧・編集
+- 競合解決
+- Undo
+- 正本を開く
+- 正本への書き戻し（reflect）
+- 変更ログの表示
 
 ## 5. GUI 方針
 
@@ -144,43 +130,72 @@ Mail Archive + OneDrive同期済みローカル
 ### 5.2 必須体験
 
 - 一覧から案件を素早く選べる
-- 右側または下側で詳細をすぐ見られる
+- 右側で詳細をすぐ見られる
 - メール、添付、案件フォルダ、台帳を `開く` で直接開ける
+- 変更ログがリアルタイムで流れる
 - 画面が見切れない
 - 低解像度でも最低限操作できる
 - キーボード操作しやすい
+- Ctrl+Z で直前の編集を元に戻せる
 
-### 5.3 主画面構成
+### 5.3 主画面構成（3カラム）
 
-- 左または上
-  - 案件一覧
-- 右または下
-  - 台帳項目の詳細
-  - 紐付いたメール一覧
-  - 案件フォルダファイル一覧
-  - 編集欄
-- 上部
-  - 検索
-  - 同期
-  - 書き戻し
-  - ステータス表示
+```text
+┌──────────┬─────────────────┬──────────┐
+│ 左       │ 中央            │ 右       │
+│ ソース   │ TabControl      │ 変更ログ │
+│ フィルタ │ - Detail        │ (リアル  │
+│ レコード │ - Mail          │  タイム  │
+│ リスト   │ - Files         │  表示)   │
+│          │ - 編集欄        │          │
+├──────────┼─────────────────┤          │
+│ 件数     │ Save不要(自動)  │          │
+└──────────┴─────────────────┴──────────┘
+  ツールバー: Sync | Reflect | Settings
+  ステータスバー: 最終同期時刻
+```
+
+- 左カラム: 案件一覧（ソース選択、フィルタ、レコードリスト）
+- 中央カラム: 詳細表示・編集（タブ切替）
+- 右カラム: 変更ログ（テーブル・フォルダ・メールの変更をリアルタイム表示）
+
+### 5.4 変更ログカラム
+
+- changelog.jsonl の内容をリアルタイムで表示する
+- 表示項目: 時刻、ソース、キー、フィールド、旧値→新値、origin
+- origin による色分け:
+  - `local` — 通常色
+  - `remote` — 青系
+  - `conflict_local` / `conflict_remote` — 黄系
+  - `undo` — グレー
+- 新しいエントリは上に追加（最新が上）
+- フィルタ: ソース別、origin別で絞り込み可能
 
 ## 6. ローカルで管理するファイル
 
-ローカルで永続化するのは次の 5 つだけとする。
+### 6.1 データファイル（ソースごと）
 
-1. `table.json`
-2. `mails.json`
-3. `folders.json`
-4. `config.local.json`
-5. `cache.json`
+- `{src}.json` — 正本の JSON 化データ（作業コピー）
+- `{src}.snapshot.json` — 前回同期時の正本凍結コピー（3-way merge のベース）
 
-補足
-- `table.json` `mails.json` `folders.json` はそれぞれ正本の JSON 化データ
-- `cache.json` はアプリ内状態だけを持つ
-- GUI の統合ビューはメモリ上で作る
-- `cases.json` のような統合 JSON は持たない
-- `index.json` のような専用 index も持たない
+### 6.2 共通ファイル
+
+- `changelog.jsonl` — 編集履歴ログ（append-only, JSONL形式）
+- `config.local.json` — ローカル実行設定
+- `cache.json` — アプリ内状態
+
+### 6.3 changelog.jsonl の形式
+
+```json
+{"ts":"2026-03-07T14:30:00+09:00","src":"anken","key":"R06-001","field":"ステータス","old":"審査中","new":"完了","origin":"local"}
+```
+
+origin の値:
+- `local` — ユーザーが GUI で編集
+- `remote` — ソース側の変更が自動マージされた
+- `conflict_local` — 競合でローカル側を採用
+- `conflict_remote` — 競合でリモート側を採用
+- `undo` — Undo 操作
 
 ## 7. 正本とローカル入口
 
@@ -194,7 +209,8 @@ Mail Archive + OneDrive同期済みローカル
 
 - 正本: SharePoint 上の Excel 台帳
 - ローカル入口: OneDrive 同期済みローカルの台帳ファイル
-- `shinsa` はこのローカル台帳を読む
+- `shinsa` はこのローカル台帳を EPPlus で読む（COMは使わない）
+- 台帳は複数ユーザーが SharePoint 共同編集で同時に編集する前提
 
 ### 7.3 SharePoint 案件フォルダ
 
@@ -204,7 +220,7 @@ Mail Archive + OneDrive同期済みローカル
 
 ## 8. JSON ごとの責務
 
-### 8.1 table.json
+### 8.1 table.json（台帳）
 
 役割
 - 案件台帳そのものの JSON 化データ
@@ -223,88 +239,28 @@ Mail Archive + OneDrive同期済みローカル
 - その他、台帳に実在する列
 
 保持しないもの
-- メール手動紐付け
-- GUI 独自の進捗
+- GUI 独自の状態
 - ウィンドウ状態
 - 検索条件
 
-主な列例
-- `case_id`
-- `receipt_no`
-- `organization_name`
-- `contact_name`
-- `contact_email`
-- `status`
-- `assigned_to`
-- `missing_documents`
-- `review_note_public`
-- `table_path`
-- `table_sheet`
-- `table_row_id`
+内部メタデータ（`_` プレフィクス）
+- `_source_path` — ソースファイルパス
+- `_source_sheet` — シート名
+- `_source_row_id` — 行番号
 
-### 8.2 mails.json
+### 8.2 mails.json（メール）
 
 役割
 - Mail Archive の JSON 化データ
 - メールそのものの事実だけを持つ
 - 1 メール 1 レコード
 
-保持するもの
-- 差出人
-- 件名
-- 受信日時
-- 本文パス
-- msg パス
-- 添付パス
-- Outlook フォルダパス
-
-保持しないもの
-- 手動で紐付けた案件 ID
-- GUI 独自の進捗
-- 一時メモ
-
-主な列例
-- `mail_id`
-- `entry_id`
-- `mailbox_address`
-- `folder_path`
-- `received_at`
-- `sender_name`
-- `sender_email`
-- `subject`
-- `body_path`
-- `msg_path`
-- `attachment_paths`
-
-### 8.3 folders.json
+### 8.3 folders.json（案件フォルダ）
 
 役割
 - 案件フォルダの JSON 化データ
 - 案件フォルダ内のファイル事実だけを持つ
 - 1 ファイル 1 レコードを基本とする
-
-保持するもの
-- 案件 ID
-- フォルダパス
-- ファイルパス
-- 相対パス
-- 更新日時
-- サイズ
-
-保持しないもの
-- 採用ファイル選択状態
-- GUI 独自のタグ
-- publish フラグ
-
-主な列例
-- `case_id`
-- `folder_path`
-- `file_path`
-- `relative_path`
-- `file_name`
-- `extension`
-- `modified_at`
-- `size`
 
 ### 8.4 config.local.json
 
@@ -313,17 +269,6 @@ Mail Archive + OneDrive同期済みローカル
 - 自分の送信アカウント設定
 - OneDrive パス設定
 - Mail Archive パス設定
-- 台帳列名設定
-
-主な項目
-- `paths.mail_archive_root`
-- `paths.sharepoint_table_path`
-- `paths.sharepoint_case_root`
-- `paths.json_root`
-- `mail.self_address`
-- `table.key_column`
-- `table.sheet_name`
-- `table.columns.*`
 
 ### 8.5 cache.json
 
@@ -332,94 +277,119 @@ Mail Archive + OneDrive同期済みローカル
 - 削除しても正本や JSON 化データ自体は壊れない
 
 保持するもの
-- メールの手動紐付け
-- GUI 独自の進捗
-- 検索条件
-- ソート順
+- 検索条件、ソート順
 - 最後に開いた案件
 - ウィンドウ位置やペイン幅
+- フィールド設定（editable フラグ等）
 
-保持しないもの
-- 台帳に戻す値
-- メールそのものの事実
-- 案件フォルダそのものの事実
+## 9. ソース間結合
 
-構成例
-- `mail_links`
-- `mail_progress`
-- `ui_state`
+### 9.1 config-driven join
 
-## 9. 紐付けルール
+- ソース間の結合は `config.base.json` の `sources[].join` で定義する
+- `join` は `source`（結合先ソース名）、`local_key`（自ソースのキー）、`foreign_key`（結合先のキー）を持つ
+- キー一致で結合する。大文字小文字は区別しない
+- 結合結果はメモリ上で作るだけで、永続化しない
 
-### 9.1 強い紐付け
+### 9.2 設計方針
 
-- `table.json` と `folders.json` は `case_id` で確実に紐付く
-- `case_id` が無い場合は、仕様上の主キー列を `case_id` に正規化して扱う
-
-### 9.2 弱い紐付け
-
-- `mails.json` と `table.json` は `contact_email` と `sender_email` で候補を出す
-- これは確実ではない
-- 自動候補は GUI で表示するだけに留める
-- 手動補正結果は `cache.json` に持つ
-
-### 9.3 GUI 上の結合
-
-- `table.json` を主テーブルとして扱う
-- `folders.json` は `case_id` で結合する
-- `mails.json` は `cache.json.mail_links` を優先し、無ければメールアドレス一致で候補表示する
-- 統合結果はメモリ上で作るだけで、永続化しない
+- 手動紐付けの仕組みは持たない
+- 結合キーとなるデータを正本側で正しく管理する
+- `join` 定義を変えれば任意のソース間で結合できる
 
 ## 10. sync の仕様
 
-sync は次を行う。
+### 10.1 リアルタイム自動同期（Smart Sync）
 
-1. Outlook VBA が更新した Mail Archive を読む
-2. OneDrive 同期済み台帳を読む
-3. OneDrive 同期済み案件フォルダを読む
-4. `table.json` を再生成する
-5. `mails.json` を再生成する
-6. `folders.json` を再生成する
-7. `cache.json` は保持する
+- GUI 起動中、5秒間隔でソースファイルの `LastWriteTime` をチェックする
+- 変更を検知した場合のみ、実際のインポート処理を実行する
+- 同期間隔は `config.base.json` の `sync.interval_ms` で変更可能
+- `sync.auto_sync` で自動同期の有効/無効を切り替えられる
 
-重要
-- `cache.json` は sync で消さない
-- 手動紐付けや GUI 独自進捗は `cache.json` に残る
-- `table.json` `mails.json` `folders.json` は source から作り直してよい
+### 10.2 3-way merge
 
-## 11. GUI の仕様
+同期時にスナップショット（前回同期時の凍結コピー）を使い、3者を比較する。
 
-### 11.1 基本方針
+```text
+snapshot (前回同期時) ←→ local (現在のJSON) ←→ remote (ソースから新たに読んだ値)
+```
 
-- GUI は `table.json` `mails.json` `folders.json` `cache.json` を読み込む
+editable 列の各フィールドについて:
+- local==snapshot かつ remote が変更 → リモート採用（自動マージ）
+- local が変更 かつ remote==snapshot → ローカル維持
+- 両方変更、同値 → OK
+- 両方変更、異値 → **競合** → ダイアログで解決
+
+non-editable 列:
+- 常にリモート値を採用する
+
+レコード追加/削除:
+- リモートのみに存在する新レコード → 追加
+- ローカルのみに存在（リモートから消えた）→ 削除
+- リモートに新フィールド追加 → 自動採用
+
+### 10.3 競合解決ダイアログ
+
+- フィールド名、元の値、ローカル値、リモート値を表示
+- 各フィールドで「ローカルを採用」「リモートを採用」を選択
+- 複数レコードの競合はナビゲーションで切り替え
+- 解決結果は changelog に記録
+
+### 10.4 スナップショット
+
+- 同期完了時に `{src}.snapshot.json` を書き出す
+- スナップショットはリモートから読んだ値をそのまま凍結する
+- 次回同期時の 3-way merge のベースになる
+- 初回（スナップショットなし）は従来通り全上書き
+
+### 10.5 手動同期
+
+- F5 キーまたは Sync ボタンで手動でも実行できる
+- 手動同期も Smart Sync（3-way merge）を使う
+
+## 11. 自動保存
+
+- GUI での編集は自動的にローカル JSON に保存される
+- Save ボタンは存在しない
+- 保存タイミング: レコード切替時、ソース切替時、フォーム閉じ時
+- dirty フラグで不要なディスク書き込みを抑制する
+
+## 12. Undo
+
+- Ctrl+Z で直前のローカル編集を元に戻す
+- Undo スタック（直近 N 件）をメモリに保持
+- リモート変更の Undo は対象外
+- Undo 操作は changelog に `origin=undo` で記録
+
+## 13. GUI の仕様
+
+### 13.1 基本方針
+
+- GUI は `{src}.json` と `cache.json` を読み込む
 - GUI はメモリ上で突合して表示する
 - GUI は統合 JSON を別保存しない
 
-### 11.2 主画面
+### 13.2 主画面
 
-- 主テーブルは `table.json`
+- 主テーブルは config で定義されたソース
 - 台帳の案件行を一覧表示する
 - 選択案件に対して以下を表示する
-  - 紐付いたメール一覧
-  - 案件フォルダ内ファイル一覧
-  - 台帳列の編集欄
+  - join で結合されたメール一覧
+  - join で結合されたファイル一覧
+  - 台帳列の編集欄（自動保存）
+- 右カラムに変更ログをリアルタイム表示する
 
-### 11.3 編集できるもの
+### 13.3 編集できるもの
 
-- 台帳に実在する列
+- `editable_columns` に指定された列（ただし `key_column` は除外）
 - `cache.json` に属するアプリ内状態
 
-具体例
-- 台帳列の編集
-  - `status`
-  - `assigned_to`
-  - `missing_documents`
-  - `review_note_public`
-- cache の編集
-  - メール手動紐付け
-  - GUI 独自進捗
+### 13.4 編集できないもの
 
-### 11.4 開く操作
+- `key_column`（`editable_columns` に含まれていても GUI 上で編集不可）
+- フィールド名（列ヘッダ）はソース側で管理、shinsa では読み取り専用
+
+### 13.5 開く操作
 
 GUI から次を直接開けるようにする。
 
@@ -429,98 +399,106 @@ GUI から次を直接開けるようにする。
 - 案件フォルダ
 - 台帳ファイル
 
-## 12. bridge / writeback の仕様
+## 14. reflect / writeback の仕様
 
-### 12.1 台帳反映
+### 14.1 台帳反映
 
-- 実処理は Excel VBA bridge
+- 実処理は PowerShell + EPPlus
 - 対象は OneDrive 同期済みローカル台帳
-- `table.json` と実際の台帳を比較して反映する
-- 変更確認は VBA 側で行う
+- `{src}.json` と実際の台帳を比較して反映する
+- reflect 前に Smart Sync を実行し、最新のリモートと比較する
+- 競合があれば先に解決してから reflect する
 - 反映対象は台帳に存在する列だけ
 - GUI 独自項目は反映しない
+- 変更確認ダイアログを表示する
 
-### 12.2 案件フォルダ反映
+### 14.2 案件フォルダ反映
 
 - 実処理は PowerShell
 - 対象は OneDrive 同期済みローカル案件フォルダ
 - どのファイルを配置するかは GUI と cache を見て判断する
 - 破壊的上書きは避ける
 
-### 12.3 Outlook 下書き作成
+### 14.3 Outlook 下書き作成
 
 - 実処理は Outlook VBA bridge
 - 送信元は `config.local.json` の自分のアドレスを使う
-- 宛先は `table.json` の相手先アドレスを使う
+- 宛先は台帳の相手先アドレスを使う
 - 自動送信はしない
 - 下書き作成までを責務とする
 
-## 13. 技術責務
+## 15. 編集ログ
 
-### 13.1 Outlook VBA
+- すべての変更（ローカル編集、リモート変更、競合解決、Undo）を `changelog.jsonl` に記録する
+- Excel 正本側には一切追記しない
+- ログは GUI 右カラムでリアルタイム表示する
+- ログファイルは append-only で、削除しても動作に影響しない
+
+## 16. 技術責務
+
+### 16.1 Outlook VBA
 
 - Outlook からメールと添付を Mail Archive に保存する
 - 必要に応じて返信下書きを作成する
 - SharePoint には直接アクセスしない
 
-### 13.2 PowerShell
+### 16.2 PowerShell
 
 - Mail Archive と OneDrive 同期済みローカルを読む
-- `table.json` `mails.json` `folders.json` を生成する
+- `{src}.json` `{src}.snapshot.json` を生成する
 - GUI を起動する
 - 案件フォルダ反映を行う
+- 台帳反映を行う（EPPlus 経由）
 
-### 13.3 Excel VBA bridge
-
-- `table.json` と台帳を比較する
-- 変更確認を出す
-- 台帳列だけ反映する
-- SharePoint には直接アクセスせず、OneDrive ローカル台帳を扱う
-
-### 13.4 GUI
+### 16.3 GUI
 
 - JSON を読み込んで統合表示する
-- 台帳列を編集する
+- 台帳列を編集する（自動保存）
 - cache を更新する
 - 正本ファイルを開く
+- リアルタイム自動同期・競合解決
+- 変更ログ表示
 
-## 14. 代表ユースケース
+## 17. 代表ユースケース
 
-### 14.1 新規申請の確認
+### 17.1 新規申請の確認
 
 1. Outlook VBA が申請メールを Mail Archive に保存する
 2. OneDrive が台帳と案件フォルダを同期する
 3. ユーザーが `shinsa` を起動する
-4. `sync` で JSON を更新する
+4. 自動同期で JSON が更新される（変更ログに表示）
 5. GUI で案件一覧を確認する
 6. 該当案件のメール、添付、案件フォルダ、台帳を開いて確認する
 
-### 14.2 メールの手動紐付け
+### 17.2 台帳更新
 
-1. 自動候補だけでは案件が確定しないメールを GUI で開く
-2. 対象案件をユーザーが選ぶ
-3. 紐付け結果を `cache.json` に保存する
-4. 次回以降の GUI 表示でもその紐付けを優先する
+1. GUI で台帳列を編集する（自動保存、ログに記録）
+2. `reflect` を実行する
+3. Smart Sync で最新のリモートと比較する
+4. 競合があればダイアログで解決する
+5. 確認後、限定列だけ反映する
+6. OneDrive が SharePoint に同期する
 
-### 14.3 台帳更新
+### 17.3 他ユーザーの変更を受信
 
-1. GUI で台帳列を編集する
-2. `writeback` を実行する
-3. Excel VBA bridge が OneDrive ローカル台帳との差分を確認する
-4. ユーザーが確認後、限定列だけ反映する
-5. OneDrive が SharePoint に同期する
+1. 他ユーザーが SharePoint 台帳を編集する
+2. OneDrive がローカルに同期する
+3. shinsa が 5 秒以内に変更を検知する
+4. 3-way merge で自動マージされる（非競合の場合）
+5. 変更ログに「remote」として表示される
+6. 競合があればダイアログが表示される
 
-### 14.4 返信下書き作成
+### 17.4 返信下書き作成
 
 1. GUI で案件を開く
 2. 必要なメールや添付を確認する
 3. bridge を通じて Outlook VBA で下書きを作成する
 4. ユーザーが Outlook で内容を確認する
 
-## 15. 未決事項
+## 18. 未決事項
 
 - 台帳の主キーを `case_id` と `receipt_no` のどちらに揃えるか
 - 申請担当者アドレス帳が台帳内包か別シートか別ファイルか
 - 案件フォルダ反映時の退避ルールをどうするか
-- GUI 独自進捗の状態一覧をどう定義するか
 - Mail Archive の保存階層をどこまで Outlook フォルダ構造に寄せるか
+- changelog.jsonl のローテーション（サイズ上限）をどうするか

@@ -1,0 +1,16 @@
+{
+  "mail_id": "MAIL-0006",
+  "entry_id": "00000006",
+  "mailbox_address": "shinsa@example.org",
+  "folder_path": "受信トレイ/交付金申請",
+  "received_at": "2024-05-01T08:50:00+09:00",
+  "sender_name": "中村 雅子",
+  "sender_email": "nakamura@dentou-bunka.or.jp",
+  "subject": "交付金申請書類の提出（伝統文化継承センター）",
+  "body_path": "body.txt",
+  "msg_path": "",
+  "attachments": [
+    { "path": "application.pdf" },
+    { "path": "estimate_a.pdf" }
+  ]
+}

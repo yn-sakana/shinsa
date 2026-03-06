@@ -1,13 +1,17 @@
 {
-    "mail_id": "MAIL-0004",
-    "entry_id": "ENTRY-0004",
-    "mailbox_address": "grants@example.org",
-    "folder_path": "Inbox/Grant Applications",
-    "received_at": "2026-03-03T16:30:00+09:00",
-    "sender_name": "Kenji Suzuki",
-    "sender_email": "suzuki@example.org",
-    "subject": "Partial submission - budget plan to follow",
-    "body_path": "body.txt",
-    "msg_path": "",
-    "attachment_paths": []
+  "mail_id": "MAIL-0004",
+  "entry_id": "00000004",
+  "mailbox_address": "shinsa@example.org",
+  "folder_path": "受信トレイ/交付金申請",
+  "received_at": "2024-05-02T16:45:00+09:00",
+  "sender_name": "高橋 誠",
+  "sender_email": "takahashi@kankyo-suishin.or.jp",
+  "subject": "Re: 不足書類について（環境保全推進機構）",
+  "body_path": "body.txt",
+  "msg_path": "",
+  "attachments": [
+    { "path": "articles_of_incorporation.pdf" },
+    { "path": "activity_report_r3.pdf" },
+    { "path": "activity_report_r4.pdf" }
+  ]
 }

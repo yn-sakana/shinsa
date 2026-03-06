@@ -1,13 +1,15 @@
 {
-    "mail_id": "MAIL-0003",
-    "entry_id": "ENTRY-0003",
-    "mailbox_address": "grants@example.org",
-    "folder_path": "Inbox/Grant Applications",
-    "received_at": "2026-03-04T09:45:00+09:00",
-    "sender_name": "Yuki Tanaka",
-    "sender_email": "tanaka@example.org",
-    "subject": "Complete application package",
-    "body_path": "body.txt",
-    "msg_path": "",
-    "attachment_paths": ["application_form.pdf", "activity_report.pdf"]
+  "mail_id": "MAIL-0003",
+  "entry_id": "00000003",
+  "mailbox_address": "shinsa@example.org",
+  "folder_path": "受信トレイ/交付金申請",
+  "received_at": "2024-04-20T09:30:00+09:00",
+  "sender_name": "高橋 誠",
+  "sender_email": "takahashi@kankyo-suishin.or.jp",
+  "subject": "R6年度交付金申請について",
+  "body_path": "body.txt",
+  "msg_path": "",
+  "attachments": [
+    { "path": "application.pdf" }
+  ]
 }

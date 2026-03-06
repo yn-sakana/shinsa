@@ -1,0 +1,57 @@
+[
+  {
+    "training_id": "KEN-2024-01",
+    "training_name": "交付金審査実務研修（基礎編）",
+    "instructor": "木村 教授",
+    "scheduled_date": "2024-06-15",
+    "venue": "本庁舎 3F 大会議室",
+    "capacity": "30",
+    "enrolled": "28",
+    "status": "受付中",
+    "remarks": "新任職員向け。筆記用具持参。"
+  },
+  {
+    "training_id": "KEN-2024-02",
+    "training_name": "補助金適正化法の実務ポイント",
+    "instructor": "松本 弁護士",
+    "scheduled_date": "2024-07-10",
+    "venue": "オンライン（Teams）",
+    "capacity": "50",
+    "enrolled": "12",
+    "status": "受付中",
+    "remarks": "Teamsリンクは前日にメール送付。録画配信あり。"
+  },
+  {
+    "training_id": "KEN-2024-03",
+    "training_name": "Excel台帳管理と集計テクニック",
+    "instructor": "情報システム課 斎藤",
+    "scheduled_date": "2024-05-20",
+    "venue": "本庁舎 2F PC研修室",
+    "capacity": "20",
+    "enrolled": "20",
+    "status": "満席",
+    "remarks": "PC研修室のPC使用。定員に達したため受付終了。キャンセル待ち3名。"
+  },
+  {
+    "training_id": "KEN-2024-04",
+    "training_name": "不正受給防止と事後検査の進め方",
+    "instructor": "会計検査院OB 吉田",
+    "scheduled_date": "2024-08-22",
+    "venue": "県民会館 中ホール",
+    "capacity": "100",
+    "enrolled": "35",
+    "status": "受付中",
+    "remarks": "他課・外部団体にも案内予定。会場費は総務課負担。"
+  },
+  {
+    "training_id": "KEN-2024-05",
+    "training_name": "交付金審査実務研修（応用編）",
+    "instructor": "木村 教授",
+    "scheduled_date": "2024-09-12",
+    "venue": "本庁舎 3F 大会議室",
+    "capacity": "30",
+    "enrolled": "0",
+    "status": "準備中",
+    "remarks": "基礎編受講者が対象。日程は仮。講師と調整中。"
+  }
+]
