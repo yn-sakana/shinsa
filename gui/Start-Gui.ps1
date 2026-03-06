@@ -43,6 +43,9 @@ $script:cacheState = $null
 $script:joinedTabs = @{}
 $script:fieldGroupTabs = @()
 $script:dirty = $false
+$script:loading = $false
+$script:currentSourceName = ''
+$script:currentRecordIndex = -1
 $script:undoStack = [System.Collections.ArrayList]::new()
 $script:undoMaxSize = 50
 $script:lastSourceTimestamps = @{}
@@ -198,10 +201,8 @@ function Save-SourceData {
     $editableCols = Get-EditableColumns $Name
     if ($editableCols.Count -eq 0) { return }
 
-    $idx = $listRecords.SelectedIndex
-    if ($idx -lt 0 -or $idx -ge $script:filteredIndices.Count) { return }
-
-    $recIdx = $script:filteredIndices[$idx]
+    $recIdx = $script:currentRecordIndex
+    if ($recIdx -lt 0 -or $recIdx -ge $script:allData[$Name].Count) { return }
     $rec = $script:allData[$Name][$recIdx]
     $src = Get-SourceConfig $Name
     $keyColumn = if ($null -ne $src.key_column) { [string]$src.key_column } else { '' }
@@ -232,15 +233,14 @@ function Save-SourceData {
     if (-not $Quiet -and $changed) { $statusBar.Text = 'Saved.' }
 }
 
-function Save-CurrentRecordEdits {
-    if (-not $script:dirty) { return }
-    $name = [string]$cmbSource.SelectedItem
+function Save-CurrentRecord {
+    $name = $script:currentSourceName
     if (-not $name) { return }
     Save-SourceData $name -Quiet
 }
 
 function Invoke-GuiSync {
-    Save-CurrentRecordEdits
+    Save-CurrentRecord
     $statusBar.Text = 'Syncing...'
     $form.Refresh()
     $conflicts = @(& (Join-Path $script:AppRoot 'scripts\Sync-Data.ps1'))
@@ -258,7 +258,7 @@ function Invoke-GuiSync {
 function Invoke-GuiWriteback {
     $name = [string]$cmbSource.SelectedItem
     if (-not $name) { return }
-    Save-CurrentRecordEdits
+    Save-CurrentRecord
 
     # Smart sync first to get latest remote
     Invoke-GuiSync
@@ -965,7 +965,13 @@ function Add-FieldEditorsToPanel {
         $txt.ReadOnly = (-not $isEditable)
         if ($txt.ReadOnly) { $txt.BackColor = [System.Drawing.Color]::FromArgb(240, 240, 240) }
         if ($isMultiline) { $txt.Multiline = $true; $txt.ScrollBars = 'Vertical' }
-        if ($isEditable) { $txt.Add_TextChanged({ $script:dirty = $true }) }
+        if ($isEditable) {
+            $txt.Add_TextChanged({
+                if ($script:loading) { return }
+                $script:dirty = $true
+                Save-CurrentRecord
+            })
+        }
         $tbl.Controls.Add($txt, 1, $i)
 
         $script:fieldEditors[$fieldName] = $txt
@@ -1032,13 +1038,18 @@ function Build-FieldEditors {
 
 function Fill-FieldEditors {
     param($Record)
-    if (-not $Record) {
-        foreach ($txt in $script:fieldEditors.Values) { $txt.Text = '' }
-        return
-    }
-    foreach ($fn in $script:fieldEditors.Keys) {
-        $val = Get-ShinsaRecordValue -Record $Record -Name $fn
-        $script:fieldEditors[$fn].Text = Format-FieldValue $val
+    $script:loading = $true
+    try {
+        if (-not $Record) {
+            foreach ($txt in $script:fieldEditors.Values) { $txt.Text = '' }
+            return
+        }
+        foreach ($fn in $script:fieldEditors.Keys) {
+            $val = Get-ShinsaRecordValue -Record $Record -Name $fn
+            $script:fieldEditors[$fn].Text = Format-FieldValue $val
+        }
+    } finally {
+        $script:loading = $false
     }
 }
 
@@ -1046,9 +1057,15 @@ function Update-DetailTab {
     param([string]$SourceName)
     $pnlButtons.Controls.Clear()
     $idx = $listRecords.SelectedIndex
-    if ($idx -lt 0 -or $idx -ge $script:filteredIndices.Count) { Fill-FieldEditors $null; return }
+    if ($idx -lt 0 -or $idx -ge $script:filteredIndices.Count) {
+        $script:currentRecordIndex = -1
+        Fill-FieldEditors $null
+        return
+    }
 
     $recIdx = $script:filteredIndices[$idx]
+    $script:currentRecordIndex = $recIdx
+    $script:currentSourceName = $SourceName
     $rec = $script:allData[$SourceName][$recIdx]
     Fill-FieldEditors $rec
     $script:dirty = $false
@@ -1484,7 +1501,6 @@ function Load-ChangeLog {
 # =============================================================================
 
 $cmbSource.Add_SelectedIndexChanged({
-    Save-CurrentRecordEdits
     $name = [string]$cmbSource.SelectedItem
     $txtFilter.Clear()
     Build-FieldEditors $name
@@ -1493,7 +1509,6 @@ $cmbSource.Add_SelectedIndexChanged({
 })
 
 $listRecords.Add_SelectedIndexChanged({
-    Save-CurrentRecordEdits
     Update-Detail
 })
 
@@ -1587,7 +1602,7 @@ $form.Add_Shown({
 
 $form.Add_FormClosing({
     $syncTimer.Stop()
-    Save-CurrentRecordEdits
+    Save-CurrentRecord
     Save-UiState
 })
 
