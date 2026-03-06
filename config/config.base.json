@@ -1,36 +1,41 @@
-﻿{
+{
   "app": {
     "name": "shinsa",
-    "mode": "review"
+    "shell_prompt": "shinsa"
   },
   "paths": {
-    "onedriveLedgerRoot": "C:/ONEDRIVE/GrantLedger",
-    "onedriveCaseRoot": "C:/ONEDRIVE/GrantCases",
-    "mailSourceRoot": "C:/workspace/dev/shinsa/data/source/mail",
-    "cloneRoot": "C:/workspace/dev/shinsa/data/clone",
-    "indexRoot": "C:/workspace/dev/shinsa/data/index",
-    "workRoot": "C:/workspace/dev/shinsa/data/work",
-    "logRoot": "C:/workspace/dev/shinsa/logs"
+    "mail_archive_root": "",
+    "sharepoint_ledger_path": "",
+    "sharepoint_case_root": "",
+    "json_root": "data/local/json"
   },
-  "outlook": {
-    "enabled": true,
-    "targetFolders": ["Inbox"],
-    "saveMsg": true,
-    "saveAttachments": true,
-    "maxItemsPerFolder": 200
+  "mail": {
+    "self_address": ""
   },
   "ledger": {
-    "casesFileName": "cases.json",
-    "contactsFileName": "contacts.json",
-    "keyField": "case_id",
-    "editableFields": ["status", "assigned_to", "review_note", "missing_documents"]
+    "key_column": "case_id",
+    "sheet_name": "",
+    "header_row": 1,
+    "editable_columns": ["status", "assigned_to", "missing_documents", "review_note_public"],
+    "display_columns": ["case_id", "receipt_no", "organization_name", "contact_name", "contact_email", "status", "assigned_to"],
+    "detail_columns": ["case_id", "receipt_no", "organization_name", "contact_name", "contact_email", "status", "assigned_to", "missing_documents", "review_note_public"],
+    "columns": {
+      "case_id": "case_id",
+      "receipt_no": "receipt_no",
+      "organization_name": "organization_name",
+      "contact_name": "contact_name",
+      "contact_email": "contact_email",
+      "status": "status",
+      "assigned_to": "assigned_to",
+      "missing_documents": "missing_documents",
+      "review_note_public": "review_note_public"
+    }
   },
   "gui": {
     "title": "shinsa",
-    "visibleColumns": ["case_id", "organization_name", "contact_email", "status", "assigned_to", "mail_count", "attachment_count"]
-  },
-  "review": {
-    "defaultStatus": "received"
+    "font_name": "MS UI Gothic",
+    "font_size": 9,
+    "window_width": 1400,
+    "window_height": 860
   }
 }
-

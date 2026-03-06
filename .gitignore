@@ -1,7 +1,3 @@
 config/config.local.json
-logs/
-data/clone/
-data/index/
-data/source/
-data/work/
+data/local/
 *.log

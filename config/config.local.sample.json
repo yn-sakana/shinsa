@@ -1,15 +1,11 @@
-﻿{
+{
   "paths": {
-    "onedriveLedgerRoot": "C:/workspace/dev/shinsa/data/sample/onedrive/ledger",
-    "onedriveCaseRoot": "C:/workspace/dev/shinsa/data/sample/onedrive/cases",
-    "mailSourceRoot": "C:/workspace/dev/shinsa/data/source/mail",
-    "cloneRoot": "C:/workspace/dev/shinsa/data/clone",
-    "indexRoot": "C:/workspace/dev/shinsa/data/index",
-    "workRoot": "C:/workspace/dev/shinsa/data/work",
-    "logRoot": "C:/workspace/dev/shinsa/logs"
+    "mail_archive_root": "data/sample/mail",
+    "sharepoint_ledger_path": "data/sample/onedrive/ledger/ledger.source.json",
+    "sharepoint_case_root": "data/sample/onedrive/cases",
+    "json_root": "data/local/json"
   },
-  "outlook": {
-    "targetFolders": ["Inbox"]
+  "mail": {
+    "self_address": "reviewer@example.org"
   }
 }
-
