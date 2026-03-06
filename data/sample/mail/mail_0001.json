@@ -1,0 +1,10 @@
+﻿{
+  "mail_id": "MAIL-0001",
+  "case_id": "CASE-0001",
+  "sender_name": "Hanako Sato",
+  "sender_email": "grant@example.org",
+  "subject": "Grant application submission",
+  "received_at": "2026-03-06T10:15:30+09:00",
+  "body_path": "body.txt",
+  "attachments": ["application.pdf", "budget.xlsx"]
+}

@@ -1,0 +1,36 @@
+﻿{
+  "app": {
+    "name": "shinsa",
+    "mode": "review"
+  },
+  "paths": {
+    "onedriveLedgerRoot": "C:/ONEDRIVE/GrantLedger",
+    "onedriveCaseRoot": "C:/ONEDRIVE/GrantCases",
+    "mailSourceRoot": "C:/workspace/dev/shinsa/data/source/mail",
+    "cloneRoot": "C:/workspace/dev/shinsa/data/clone",
+    "indexRoot": "C:/workspace/dev/shinsa/data/index",
+    "workRoot": "C:/workspace/dev/shinsa/data/work",
+    "logRoot": "C:/workspace/dev/shinsa/logs"
+  },
+  "outlook": {
+    "enabled": true,
+    "targetFolders": ["Inbox"],
+    "saveMsg": true,
+    "saveAttachments": true,
+    "maxItemsPerFolder": 200
+  },
+  "ledger": {
+    "casesFileName": "cases.json",
+    "contactsFileName": "contacts.json",
+    "keyField": "case_id",
+    "editableFields": ["status", "assigned_to", "review_note", "missing_documents"]
+  },
+  "gui": {
+    "title": "shinsa",
+    "visibleColumns": ["case_id", "organization_name", "contact_email", "status", "assigned_to", "mail_count", "attachment_count"]
+  },
+  "review": {
+    "defaultStatus": "received"
+  }
+}
+

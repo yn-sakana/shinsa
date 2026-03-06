@@ -1,0 +1,10 @@
+﻿{
+    "contacts":  [
+                     {
+                         "organization_name":  "Sample Foundation",
+                         "contact_name":  "Hanako Sato",
+                         "contact_email":  "grant@example.org",
+                         "role":  "Primary"
+                     }
+                 ]
+}

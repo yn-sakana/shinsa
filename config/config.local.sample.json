@@ -1,0 +1,15 @@
+﻿{
+  "paths": {
+    "onedriveLedgerRoot": "C:/workspace/dev/shinsa/data/sample/onedrive/ledger",
+    "onedriveCaseRoot": "C:/workspace/dev/shinsa/data/sample/onedrive/cases",
+    "mailSourceRoot": "C:/workspace/dev/shinsa/data/source/mail",
+    "cloneRoot": "C:/workspace/dev/shinsa/data/clone",
+    "indexRoot": "C:/workspace/dev/shinsa/data/index",
+    "workRoot": "C:/workspace/dev/shinsa/data/work",
+    "logRoot": "C:/workspace/dev/shinsa/logs"
+  },
+  "outlook": {
+    "targetFolders": ["Inbox"]
+  }
+}
+
