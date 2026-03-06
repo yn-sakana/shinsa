@@ -1,0 +1,13 @@
+{
+    "mail_id": "MAIL-0003",
+    "entry_id": "ENTRY-0003",
+    "mailbox_address": "grants@example.org",
+    "folder_path": "Inbox/Grant Applications",
+    "received_at": "2026-03-04T09:45:00+09:00",
+    "sender_name": "Yuki Tanaka",
+    "sender_email": "tanaka@example.org",
+    "subject": "Complete application package",
+    "body_path": "body.txt",
+    "msg_path": "",
+    "attachment_paths": ["application_form.pdf", "activity_report.pdf"]
+}

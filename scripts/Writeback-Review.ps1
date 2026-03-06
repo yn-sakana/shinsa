@@ -8,10 +8,10 @@ $ErrorActionPreference = 'Stop'
 $config = Get-ShinsaConfig -ScriptPath $MyInvocation.MyCommand.Path
 $paths = Get-ShinsaDataPaths -Config $config
 
-$plan = Get-ShinsaLedgerWritebackPlan -Config $config -Paths $paths
+$plan = Get-ShinsaTableWritebackPlan -Config $config -Paths $paths
 
 if ($plan.case_count -eq 0) {
-    Write-Host 'writeback skipped: no ledger changes.' -ForegroundColor Yellow
+    Write-Host 'writeback skipped: no table changes.' -ForegroundColor Yellow
     return
 }
 
@@ -24,14 +24,14 @@ foreach ($change in @($plan.changes)) {
 Write-Host ("  total : {0} cases / {1} fields" -f $plan.case_count, $plan.change_count)
 
 if (-not $Force) {
-    $answer = Read-Host 'write changes back to the source ledger? [y/N]'
+    $answer = Read-Host 'write changes back to the source table? [y/N]'
     if ($answer -notmatch '^(?i)y(es)?$') {
         Write-Host 'writeback cancelled.' -ForegroundColor Yellow
         return
     }
 }
 
-Invoke-ShinsaLedgerWriteback -Config $config -Paths $paths -Plan $plan
-Write-ShinsaJson -Path $paths.LedgerJsonPath -Data @(Import-ShinsaLedgerRecords -Config $config -Paths $paths | Sort-Object case_id)
+Invoke-ShinsaTableWriteback -Config $config -Paths $paths -Plan $plan
+Write-ShinsaJson -Path $paths.TableJsonPath -Data @(Import-ShinsaTableRecords -Config $config -Paths $paths | Sort-Object case_id)
 
 Write-Host 'writeback completed.' -ForegroundColor Green

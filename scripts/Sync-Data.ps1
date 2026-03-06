@@ -6,19 +6,19 @@ $paths = Get-ShinsaDataPaths -Config $config
 
 Ensure-ShinsaState -Paths $paths
 
-if ([string]::IsNullOrWhiteSpace($paths.SharePointLedgerPath) -or -not (Test-Path $paths.SharePointLedgerPath)) {
-    throw "Ledger source path is invalid: $($paths.SharePointLedgerPath)"
+if ([string]::IsNullOrWhiteSpace($paths.SharePointTablePath) -or -not (Test-Path $paths.SharePointTablePath)) {
+    throw "Table source path is invalid: $($paths.SharePointTablePath)"
 }
 
 if ([string]::IsNullOrWhiteSpace($paths.SharePointCaseRoot) -or -not (Test-Path $paths.SharePointCaseRoot)) {
     throw "Case folder root is invalid: $($paths.SharePointCaseRoot)"
 }
 
-$ledgerRecords = @(Import-ShinsaLedgerRecords -Config $config -Paths $paths | Sort-Object case_id)
+$tableRecords = @(Import-ShinsaTableRecords -Config $config -Paths $paths | Sort-Object case_id)
 $mailRecords = @(Import-ShinsaMailRecords -Paths $paths)
 $folderRecords = @(Import-ShinsaFolderRecords -Paths $paths)
 
-Write-ShinsaJson -Path $paths.LedgerJsonPath -Data $ledgerRecords
+Write-ShinsaJson -Path $paths.TableJsonPath -Data $tableRecords
 Write-ShinsaJson -Path $paths.MailsJsonPath -Data $mailRecords
 Write-ShinsaJson -Path $paths.FoldersJsonPath -Data $folderRecords
 
@@ -30,7 +30,7 @@ Save-ShinsaCache -Paths $paths -Cache $cache
 
 Write-Host ''
 Write-Host 'sync completed' -ForegroundColor Cyan
-Write-Host ("  ledger : {0} cases" -f $ledgerRecords.Count)
+Write-Host ("  table : {0} cases" -f $tableRecords.Count)
 Write-Host ("  mails  : {0} records" -f $mailRecords.Count)
 Write-Host ("  folders: {0} files" -f $folderRecords.Count)
 Write-Host ("  json   : {0}" -f $paths.JsonRoot)

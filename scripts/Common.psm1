@@ -169,12 +169,12 @@ function Get-ShinsaDataPaths {
     [pscustomobject]@{
         AppRoot = $appRoot
         JsonRoot = $jsonRoot
-        LedgerJsonPath = Join-Path $jsonRoot 'ledger.json'
+        TableJsonPath = Join-Path $jsonRoot 'table.json'
         MailsJsonPath = Join-Path $jsonRoot 'mails.json'
         FoldersJsonPath = Join-Path $jsonRoot 'folders.json'
         CacheJsonPath = Join-Path $jsonRoot 'cache.json'
         MailArchiveRoot = Resolve-ShinsaPath -AppRoot $appRoot -PathValue $Config.paths.mail_archive_root
-        SharePointLedgerPath = Resolve-ShinsaPath -AppRoot $appRoot -PathValue $Config.paths.sharepoint_ledger_path
+        SharePointTablePath = Resolve-ShinsaPath -AppRoot $appRoot -PathValue $Config.paths.sharepoint_table_path
         SharePointCaseRoot = Resolve-ShinsaPath -AppRoot $appRoot -PathValue $Config.paths.sharepoint_case_root
     }
 }
@@ -329,11 +329,11 @@ function Copy-ShinsaRecord {
     [pscustomobject](ConvertTo-ShinsaMap -InputObject $Record)
 }
 
-function Convert-SourceRowToLedgerRecord {
+function Convert-SourceRowToTableRecord {
     param(
         [Parameter(Mandatory = $true)]$Row,
         [Parameter(Mandatory = $true)]$Config,
-        [Parameter(Mandatory = $true)][string]$LedgerPath,
+        [Parameter(Mandatory = $true)][string]$TablePath,
         [string]$SheetName = '',
         [int]$RowId = 0
     )
@@ -344,8 +344,8 @@ function Convert-SourceRowToLedgerRecord {
         $record[$propertyName] = ConvertTo-ShinsaString -Value (Get-ShinsaRecordValue -Record $Row -Name $propertyName)
     }
 
-    foreach ($logicalName in $Config.ledger.columns.Keys) {
-        $sourceName = [string]$Config.ledger.columns[$logicalName]
+    foreach ($logicalName in $Config.table.columns.Keys) {
+        $sourceName = [string]$Config.table.columns[$logicalName]
         if (Test-ShinsaRecordProperty -Record $Row -Name $sourceName) {
             $record[$logicalName] = ConvertTo-ShinsaString -Value (Get-ShinsaRecordValue -Record $Row -Name $sourceName)
         }
@@ -354,7 +354,7 @@ function Convert-SourceRowToLedgerRecord {
         }
     }
 
-    $keyColumn = [string]$Config.ledger.key_column
+    $keyColumn = [string]$Config.table.key_column
     $keyValue = ''
     if ($record.Contains($keyColumn)) {
         $keyValue = ConvertTo-ShinsaString -Value $record[$keyColumn]
@@ -368,9 +368,9 @@ function Convert-SourceRowToLedgerRecord {
     }
 
     $record['case_id'] = $keyValue
-    $record['ledger_path'] = $LedgerPath
-    $record['ledger_sheet'] = $SheetName
-    $record['ledger_row_id'] = $RowId
+    $record['table_path'] = $TablePath
+    $record['table_sheet'] = $SheetName
+    $record['table_row_id'] = $RowId
 
     foreach ($requiredField in @('receipt_no', 'organization_name', 'contact_name', 'contact_email', 'status', 'assigned_to', 'missing_documents', 'review_note_public')) {
         if (-not $record.Contains($requiredField)) {
@@ -381,13 +381,13 @@ function Convert-SourceRowToLedgerRecord {
     [pscustomobject]$record
 }
 
-function Import-ShinsaLedgerFromJson {
+function Import-ShinsaTableFromJson {
     param(
         [Parameter(Mandatory = $true)]$Config,
         [Parameter(Mandatory = $true)]$Paths
     )
 
-    $source = Read-ShinsaJson -Path $Paths.SharePointLedgerPath
+    $source = Read-ShinsaJson -Path $Paths.SharePointTablePath
     if ($source -is [System.Collections.IEnumerable] -and -not ($source -is [string]) -and -not ($source -is [System.Management.Automation.PSCustomObject])) {
         $rows = @($source)
     }
@@ -404,7 +404,7 @@ function Import-ShinsaLedgerFromJson {
     $records = @()
     $rowIndex = 2
     foreach ($row in $rows) {
-        $record = Convert-SourceRowToLedgerRecord -Row $row -Config $Config -LedgerPath $Paths.SharePointLedgerPath -RowId $rowIndex
+        $record = Convert-SourceRowToTableRecord -Row $row -Config $Config -TablePath $Paths.SharePointTablePath -RowId $rowIndex
         if ($null -ne $record) {
             $records += $record
         }
@@ -435,7 +435,7 @@ function ConvertFrom-ExcelCellValue {
     [string]$Value
 }
 
-function Import-ShinsaLedgerFromExcel {
+function Import-ShinsaTableFromExcel {
     param(
         [Parameter(Mandatory = $true)]$Config,
         [Parameter(Mandatory = $true)]$Paths
@@ -450,22 +450,22 @@ function Import-ShinsaLedgerFromExcel {
         $excel = New-Object -ComObject Excel.Application
         $excel.Visible = $false
         $excel.DisplayAlerts = $false
-        $workbook = $excel.Workbooks.Open($Paths.SharePointLedgerPath, $false, $true)
+        $workbook = $excel.Workbooks.Open($Paths.SharePointTablePath, $false, $true)
 
-        if ([string]::IsNullOrWhiteSpace([string]$Config.ledger.sheet_name)) {
+        if ([string]::IsNullOrWhiteSpace([string]$Config.table.sheet_name)) {
             $worksheet = $workbook.Worksheets.Item(1)
         }
         else {
-            $worksheet = $workbook.Worksheets.Item([string]$Config.ledger.sheet_name)
+            $worksheet = $workbook.Worksheets.Item([string]$Config.table.sheet_name)
         }
 
         $usedRange = $worksheet.UsedRange
         $rowCount = [int]$usedRange.Rows.Count
         $columnCount = [int]$usedRange.Columns.Count
-        $headerRow = [int]$Config.ledger.header_row
+        $headerRow = [int]$Config.table.header_row
 
         if ($rowCount -lt $headerRow) {
-            throw "Ledger sheet does not contain header row $headerRow."
+            throw "Table sheet does not contain header row $headerRow."
         }
 
         $headers = @{}
@@ -494,7 +494,7 @@ function Import-ShinsaLedgerFromExcel {
                 continue
             }
 
-            $record = Convert-SourceRowToLedgerRecord -Row ([pscustomobject]$row) -Config $Config -LedgerPath $Paths.SharePointLedgerPath -SheetName $worksheet.Name -RowId $rowIndex
+            $record = Convert-SourceRowToTableRecord -Row ([pscustomobject]$row) -Config $Config -TablePath $Paths.SharePointTablePath -SheetName $worksheet.Name -RowId $rowIndex
             if ($null -ne $record) {
                 $records += $record
             }
@@ -521,24 +521,24 @@ function Import-ShinsaLedgerFromExcel {
     }
 }
 
-function Import-ShinsaLedgerRecords {
+function Import-ShinsaTableRecords {
     param(
         [Parameter(Mandatory = $true)]$Config,
         [Parameter(Mandatory = $true)]$Paths
     )
 
-    if (-not (Test-Path $Paths.SharePointLedgerPath)) {
-        throw "Ledger source was not found: $($Paths.SharePointLedgerPath)"
+    if (-not (Test-Path $Paths.SharePointTablePath)) {
+        throw "Table source was not found: $($Paths.SharePointTablePath)"
     }
 
-    $extension = [System.IO.Path]::GetExtension($Paths.SharePointLedgerPath).ToLowerInvariant()
+    $extension = [System.IO.Path]::GetExtension($Paths.SharePointTablePath).ToLowerInvariant()
     switch ($extension) {
-        '.json' { return @(Import-ShinsaLedgerFromJson -Config $Config -Paths $Paths) }
-        '.xlsx' { return @(Import-ShinsaLedgerFromExcel -Config $Config -Paths $Paths) }
-        '.xlsm' { return @(Import-ShinsaLedgerFromExcel -Config $Config -Paths $Paths) }
-        '.xlsb' { return @(Import-ShinsaLedgerFromExcel -Config $Config -Paths $Paths) }
-        '.xls' { return @(Import-ShinsaLedgerFromExcel -Config $Config -Paths $Paths) }
-        default { throw "Unsupported ledger source format: $extension" }
+        '.json' { return @(Import-ShinsaTableFromJson -Config $Config -Paths $Paths) }
+        '.xlsx' { return @(Import-ShinsaTableFromExcel -Config $Config -Paths $Paths) }
+        '.xlsm' { return @(Import-ShinsaTableFromExcel -Config $Config -Paths $Paths) }
+        '.xlsb' { return @(Import-ShinsaTableFromExcel -Config $Config -Paths $Paths) }
+        '.xls' { return @(Import-ShinsaTableFromExcel -Config $Config -Paths $Paths) }
+        default { throw "Unsupported table source format: $extension" }
     }
 }
 
@@ -731,22 +731,22 @@ function Get-ShinsaRelatedMails {
     @($records | Sort-Object received_at, mail_id -Descending)
 }
 
-function Get-ShinsaLedgerWritebackPlan {
+function Get-ShinsaTableWritebackPlan {
     param(
         [Parameter(Mandatory = $true)]$Config,
         [Parameter(Mandatory = $true)]$Paths
     )
 
-    if (-not (Test-Path $Paths.LedgerJsonPath)) {
-        throw "Local ledger.json was not found. Run sync first."
+    if (-not (Test-Path $Paths.TableJsonPath)) {
+        throw "Local table.json was not found. Run sync first."
     }
 
-    $currentLedger = @(Read-ShinsaJson -Path $Paths.LedgerJsonPath)
-    $sourceLedger = @(Import-ShinsaLedgerRecords -Config $Config -Paths $Paths)
-    $editableColumns = @($Config.ledger.editable_columns)
+    $currentTable = @(Read-ShinsaJson -Path $Paths.TableJsonPath)
+    $sourceTable = @(Import-ShinsaTableRecords -Config $Config -Paths $Paths)
+    $editableColumns = @($Config.table.editable_columns)
 
     $sourceByCaseId = @{}
-    foreach ($record in $sourceLedger) {
+    foreach ($record in $sourceTable) {
         $caseId = ConvertTo-ShinsaString -Value (Get-ShinsaRecordValue -Record $record -Name 'case_id')
         if (-not [string]::IsNullOrWhiteSpace($caseId)) {
             $sourceByCaseId[$caseId] = $record
@@ -754,7 +754,7 @@ function Get-ShinsaLedgerWritebackPlan {
     }
 
     $changes = @()
-    foreach ($record in $currentLedger) {
+    foreach ($record in $currentTable) {
         $caseId = ConvertTo-ShinsaString -Value (Get-ShinsaRecordValue -Record $record -Name 'case_id')
         if ([string]::IsNullOrWhiteSpace($caseId) -or -not $sourceByCaseId.ContainsKey($caseId)) {
             continue
@@ -779,7 +779,7 @@ function Get-ShinsaLedgerWritebackPlan {
 
         $changes += [pscustomobject]@{
             case_id = $caseId
-            ledger_row_id = [int](Get-ShinsaRecordValue -Record $record -Name 'ledger_row_id')
+            table_row_id = [int](Get-ShinsaRecordValue -Record $record -Name 'table_row_id')
             changes = [pscustomobject]$fieldChanges
         }
     }
@@ -790,21 +790,21 @@ function Get-ShinsaLedgerWritebackPlan {
     }
 
     [pscustomobject]@{
-        source_kind = [System.IO.Path]::GetExtension($Paths.SharePointLedgerPath).ToLowerInvariant()
+        source_kind = [System.IO.Path]::GetExtension($Paths.SharePointTablePath).ToLowerInvariant()
         changes = $changes
         change_count = [int]$changeCount
         case_count = @($changes).Count
     }
 }
 
-function Invoke-ShinsaJsonLedgerWriteback {
+function Invoke-ShinsaJsonTableWriteback {
     param(
         [Parameter(Mandatory = $true)]$Config,
         [Parameter(Mandatory = $true)]$Paths,
         [Parameter(Mandatory = $true)]$Plan
     )
 
-    $source = Read-ShinsaJson -Path $Paths.SharePointLedgerPath
+    $source = Read-ShinsaJson -Path $Paths.SharePointTablePath
     if ($source -is [System.Collections.IEnumerable] -and -not ($source -is [string]) -and -not ($source -is [System.Management.Automation.PSCustomObject])) {
         $rows = @($source)
     }
@@ -818,7 +818,7 @@ function Invoke-ShinsaJsonLedgerWriteback {
         $rows = @($source)
     }
 
-    $sourceKeyName = if ($Config.ledger.columns.Contains($Config.ledger.key_column)) { [string]$Config.ledger.columns[$Config.ledger.key_column] } else { [string]$Config.ledger.key_column }
+    $sourceKeyName = if ($Config.table.columns.Contains($Config.table.key_column)) { [string]$Config.table.columns[$Config.table.key_column] } else { [string]$Config.table.key_column }
     $rowByCaseId = @{}
     foreach ($row in $rows) {
         $caseId = ''
@@ -842,7 +842,7 @@ function Invoke-ShinsaJsonLedgerWriteback {
         $row = $rowByCaseId[$change.case_id]
         foreach ($property in $change.changes.PSObject.Properties) {
             $logicalName = $property.Name
-            $sourceName = if ($Config.ledger.columns.Contains($logicalName)) { [string]$Config.ledger.columns[$logicalName] } else { $logicalName }
+            $sourceName = if ($Config.table.columns.Contains($logicalName)) { [string]$Config.table.columns[$logicalName] } else { $logicalName }
             Set-ShinsaRecordValue -Record $row -Name $sourceName -Value $property.Value.to
             if ($sourceName -ne $logicalName -and (Test-ShinsaRecordProperty -Record $row -Name $logicalName)) {
                 Set-ShinsaRecordValue -Record $row -Name $logicalName -Value $property.Value.to
@@ -850,10 +850,10 @@ function Invoke-ShinsaJsonLedgerWriteback {
         }
     }
 
-    Write-ShinsaJson -Path $Paths.SharePointLedgerPath -Data $source
+    Write-ShinsaJson -Path $Paths.SharePointTablePath -Data $source
 }
 
-function Invoke-ShinsaExcelLedgerWriteback {
+function Invoke-ShinsaExcelTableWriteback {
     param(
         [Parameter(Mandatory = $true)]$Config,
         [Parameter(Mandatory = $true)]$Paths,
@@ -870,16 +870,16 @@ function Invoke-ShinsaExcelLedgerWriteback {
         $excel = New-Object -ComObject Excel.Application
         $excel.Visible = $false
         $excel.DisplayAlerts = $false
-        $workbook = $excel.Workbooks.Open($Paths.SharePointLedgerPath, $false, $false)
+        $workbook = $excel.Workbooks.Open($Paths.SharePointTablePath, $false, $false)
 
-        if ([string]::IsNullOrWhiteSpace([string]$Config.ledger.sheet_name)) {
+        if ([string]::IsNullOrWhiteSpace([string]$Config.table.sheet_name)) {
             $worksheet = $workbook.Worksheets.Item(1)
         }
         else {
-            $worksheet = $workbook.Worksheets.Item([string]$Config.ledger.sheet_name)
+            $worksheet = $workbook.Worksheets.Item([string]$Config.table.sheet_name)
         }
 
-        $headerRow = [int]$Config.ledger.header_row
+        $headerRow = [int]$Config.table.header_row
         $usedRange = $worksheet.UsedRange
         $columnCount = [int]$usedRange.Columns.Count
         $headerMap = @{}
@@ -891,12 +891,12 @@ function Invoke-ShinsaExcelLedgerWriteback {
         }
 
         foreach ($change in @($Plan.changes)) {
-            $rowId = [int]$change.ledger_row_id
+            $rowId = [int]$change.table_row_id
             foreach ($property in $change.changes.PSObject.Properties) {
                 $logicalName = $property.Name
-                $headerName = if ($Config.ledger.columns.Contains($logicalName)) { [string]$Config.ledger.columns[$logicalName] } else { $logicalName }
+                $headerName = if ($Config.table.columns.Contains($logicalName)) { [string]$Config.table.columns[$logicalName] } else { $logicalName }
                 if (-not $headerMap.ContainsKey($headerName)) {
-                    throw "Ledger column '$headerName' was not found in worksheet '$($worksheet.Name)'."
+                    throw "Table column '$headerName' was not found in worksheet '$($worksheet.Name)'."
                 }
 
                 $worksheet.Cells.Item($rowId, $headerMap[$headerName]).Value2 = $property.Value.to
@@ -925,7 +925,7 @@ function Invoke-ShinsaExcelLedgerWriteback {
     }
 }
 
-function Invoke-ShinsaLedgerWriteback {
+function Invoke-ShinsaTableWriteback {
     param(
         [Parameter(Mandatory = $true)]$Config,
         [Parameter(Mandatory = $true)]$Paths,
@@ -937,11 +937,11 @@ function Invoke-ShinsaLedgerWriteback {
     }
 
     switch ($Plan.source_kind) {
-        '.json' { Invoke-ShinsaJsonLedgerWriteback -Config $Config -Paths $Paths -Plan $Plan }
-        '.xlsx' { Invoke-ShinsaExcelLedgerWriteback -Config $Config -Paths $Paths -Plan $Plan }
-        '.xlsm' { Invoke-ShinsaExcelLedgerWriteback -Config $Config -Paths $Paths -Plan $Plan }
-        '.xlsb' { Invoke-ShinsaExcelLedgerWriteback -Config $Config -Paths $Paths -Plan $Plan }
-        '.xls' { Invoke-ShinsaExcelLedgerWriteback -Config $Config -Paths $Paths -Plan $Plan }
+        '.json' { Invoke-ShinsaJsonTableWriteback -Config $Config -Paths $Paths -Plan $Plan }
+        '.xlsx' { Invoke-ShinsaExcelTableWriteback -Config $Config -Paths $Paths -Plan $Plan }
+        '.xlsm' { Invoke-ShinsaExcelTableWriteback -Config $Config -Paths $Paths -Plan $Plan }
+        '.xlsb' { Invoke-ShinsaExcelTableWriteback -Config $Config -Paths $Paths -Plan $Plan }
+        '.xls' { Invoke-ShinsaExcelTableWriteback -Config $Config -Paths $Paths -Plan $Plan }
         default { throw "Writeback is not supported for source type '$($Plan.source_kind)'." }
     }
 }

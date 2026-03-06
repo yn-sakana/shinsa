@@ -5,19 +5,20 @@
   },
   "paths": {
     "mail_archive_root": "",
-    "sharepoint_ledger_path": "",
+    "sharepoint_table_path": "",
     "sharepoint_case_root": "",
     "json_root": "data/local/json"
   },
   "mail": {
     "self_address": ""
   },
-  "ledger": {
+  "table": {
     "key_column": "case_id",
     "sheet_name": "",
     "header_row": 1,
     "editable_columns": ["status", "assigned_to", "missing_documents", "review_note_public"],
-    "display_columns": ["case_id", "receipt_no", "organization_name", "contact_name", "contact_email", "status", "assigned_to"],
+    "multiline_columns": ["missing_documents", "review_note_public"],
+    "display_columns": ["case_id", "organization_name", "status"],
     "detail_columns": ["case_id", "receipt_no", "organization_name", "contact_name", "contact_email", "status", "assigned_to", "missing_documents", "review_note_public"],
     "columns": {
       "case_id": "case_id",
@@ -33,9 +34,9 @@
   },
   "gui": {
     "title": "shinsa",
-    "font_name": "MS UI Gothic",
-    "font_size": 9,
-    "window_width": 1400,
-    "window_height": 860
+    "font_name": "Yu Gothic UI",
+    "font_size": 10,
+    "window_width": 1024,
+    "window_height": 640
   }
 }

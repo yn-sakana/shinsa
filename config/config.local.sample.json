@@ -1,7 +1,7 @@
 {
   "paths": {
     "mail_archive_root": "data/sample/mail",
-    "sharepoint_ledger_path": "data/sample/onedrive/ledger/ledger.source.json",
+    "sharepoint_table_path": "data/sample/onedrive/table/table.source.json",
     "sharepoint_case_root": "data/sample/onedrive/cases",
     "json_root": "data/local/json"
   },

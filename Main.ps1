@@ -32,9 +32,9 @@ function Show-Help {
     Write-Host ''
     Write-Host 'shinsa commands' -ForegroundColor Cyan
     Write-Host '  gui        open the WinForms review GUI'
-    Write-Host '  sync       rebuild ledger.json / mails.json / folders.json'
+    Write-Host '  sync       rebuild table.json / mails.json / folders.json'
     Write-Host '  status     show configured paths and local JSON status'
-    Write-Host '  writeback  reflect edited ledger fields back to the source ledger'
+    Write-Host '  writeback  reflect edited table fields back to the source table'
     Write-Host '  help       show commands'
     Write-Host '  quit       exit the shell'
 }
@@ -72,10 +72,10 @@ function Show-Status {
     Write-Host ''
     Write-Host 'shinsa status' -ForegroundColor Cyan
     Write-Host ("  mail archive : {0}" -f $paths.MailArchiveRoot)
-    Write-Host ("  ledger src   : {0}" -f $paths.SharePointLedgerPath)
+    Write-Host ("  table src   : {0}" -f $paths.SharePointTablePath)
     Write-Host ("  case root    : {0}" -f $paths.SharePointCaseRoot)
     Write-Host ("  json root    : {0}" -f $paths.JsonRoot)
-    Write-Host ("  ledger.json  : {0}" -f (Get-JsonCount -Path $paths.LedgerJsonPath))
+    Write-Host ("  table.json  : {0}" -f (Get-JsonCount -Path $paths.TableJsonPath))
     Write-Host ("  mails.json   : {0}" -f (Get-JsonCount -Path $paths.MailsJsonPath))
     Write-Host ("  folders.json : {0}" -f (Get-JsonCount -Path $paths.FoldersJsonPath))
     Write-Host ("  cache links  : {0}" -f @($cache.mail_links).Count)

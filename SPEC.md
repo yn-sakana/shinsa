@@ -48,7 +48,7 @@ Mail Archive + OneDrive同期済みローカル
           - cache管理
                     │
                     ▼
-      ledger.json / mails.json / folders.json / cache.json
+      table.json / mails.json / folders.json / cache.json
                     │
                     ▼
                    GUI
@@ -169,14 +169,14 @@ Mail Archive + OneDrive同期済みローカル
 
 ローカルで永続化するのは次の 5 つだけとする。
 
-1. `ledger.json`
+1. `table.json`
 2. `mails.json`
 3. `folders.json`
 4. `config.local.json`
 5. `cache.json`
 
 補足
-- `ledger.json` `mails.json` `folders.json` はそれぞれ正本の JSON 化データ
+- `table.json` `mails.json` `folders.json` はそれぞれ正本の JSON 化データ
 - `cache.json` はアプリ内状態だけを持つ
 - GUI の統合ビューはメモリ上で作る
 - `cases.json` のような統合 JSON は持たない
@@ -204,7 +204,7 @@ Mail Archive + OneDrive同期済みローカル
 
 ## 8. JSON ごとの責務
 
-### 8.1 ledger.json
+### 8.1 table.json
 
 役割
 - 案件台帳そのものの JSON 化データ
@@ -238,9 +238,9 @@ Mail Archive + OneDrive同期済みローカル
 - `assigned_to`
 - `missing_documents`
 - `review_note_public`
-- `ledger_path`
-- `ledger_sheet`
-- `ledger_row_id`
+- `table_path`
+- `table_sheet`
+- `table_row_id`
 
 ### 8.2 mails.json
 
@@ -317,13 +317,13 @@ Mail Archive + OneDrive同期済みローカル
 
 主な項目
 - `paths.mail_archive_root`
-- `paths.sharepoint_ledger_path`
+- `paths.sharepoint_table_path`
 - `paths.sharepoint_case_root`
 - `paths.json_root`
 - `mail.self_address`
-- `ledger.key_column`
-- `ledger.sheet_name`
-- `ledger.columns.*`
+- `table.key_column`
+- `table.sheet_name`
+- `table.columns.*`
 
 ### 8.5 cache.json
 
@@ -353,19 +353,19 @@ Mail Archive + OneDrive同期済みローカル
 
 ### 9.1 強い紐付け
 
-- `ledger.json` と `folders.json` は `case_id` で確実に紐付く
+- `table.json` と `folders.json` は `case_id` で確実に紐付く
 - `case_id` が無い場合は、仕様上の主キー列を `case_id` に正規化して扱う
 
 ### 9.2 弱い紐付け
 
-- `mails.json` と `ledger.json` は `contact_email` と `sender_email` で候補を出す
+- `mails.json` と `table.json` は `contact_email` と `sender_email` で候補を出す
 - これは確実ではない
 - 自動候補は GUI で表示するだけに留める
 - 手動補正結果は `cache.json` に持つ
 
 ### 9.3 GUI 上の結合
 
-- `ledger.json` を主テーブルとして扱う
+- `table.json` を主テーブルとして扱う
 - `folders.json` は `case_id` で結合する
 - `mails.json` は `cache.json.mail_links` を優先し、無ければメールアドレス一致で候補表示する
 - 統合結果はメモリ上で作るだけで、永続化しない
@@ -377,7 +377,7 @@ sync は次を行う。
 1. Outlook VBA が更新した Mail Archive を読む
 2. OneDrive 同期済み台帳を読む
 3. OneDrive 同期済み案件フォルダを読む
-4. `ledger.json` を再生成する
+4. `table.json` を再生成する
 5. `mails.json` を再生成する
 6. `folders.json` を再生成する
 7. `cache.json` は保持する
@@ -385,19 +385,19 @@ sync は次を行う。
 重要
 - `cache.json` は sync で消さない
 - 手動紐付けや GUI 独自進捗は `cache.json` に残る
-- `ledger.json` `mails.json` `folders.json` は source から作り直してよい
+- `table.json` `mails.json` `folders.json` は source から作り直してよい
 
 ## 11. GUI の仕様
 
 ### 11.1 基本方針
 
-- GUI は `ledger.json` `mails.json` `folders.json` `cache.json` を読み込む
+- GUI は `table.json` `mails.json` `folders.json` `cache.json` を読み込む
 - GUI はメモリ上で突合して表示する
 - GUI は統合 JSON を別保存しない
 
 ### 11.2 主画面
 
-- 主テーブルは `ledger.json`
+- 主テーブルは `table.json`
 - 台帳の案件行を一覧表示する
 - 選択案件に対して以下を表示する
   - 紐付いたメール一覧
@@ -435,7 +435,7 @@ GUI から次を直接開けるようにする。
 
 - 実処理は Excel VBA bridge
 - 対象は OneDrive 同期済みローカル台帳
-- `ledger.json` と実際の台帳を比較して反映する
+- `table.json` と実際の台帳を比較して反映する
 - 変更確認は VBA 側で行う
 - 反映対象は台帳に存在する列だけ
 - GUI 独自項目は反映しない
@@ -451,7 +451,7 @@ GUI から次を直接開けるようにする。
 
 - 実処理は Outlook VBA bridge
 - 送信元は `config.local.json` の自分のアドレスを使う
-- 宛先は `ledger.json` の相手先アドレスを使う
+- 宛先は `table.json` の相手先アドレスを使う
 - 自動送信はしない
 - 下書き作成までを責務とする
 
@@ -466,13 +466,13 @@ GUI から次を直接開けるようにする。
 ### 13.2 PowerShell
 
 - Mail Archive と OneDrive 同期済みローカルを読む
-- `ledger.json` `mails.json` `folders.json` を生成する
+- `table.json` `mails.json` `folders.json` を生成する
 - GUI を起動する
 - 案件フォルダ反映を行う
 
 ### 13.3 Excel VBA bridge
 
-- `ledger.json` と台帳を比較する
+- `table.json` と台帳を比較する
 - 変更確認を出す
 - 台帳列だけ反映する
 - SharePoint には直接アクセスせず、OneDrive ローカル台帳を扱う

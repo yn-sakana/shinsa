@@ -5,13 +5,13 @@ $config = Get-ShinsaConfig -ScriptPath $MyInvocation.MyCommand.Path
 $paths = Get-ShinsaDataPaths -Config $config
 
 Ensure-ShinsaDirectory -Paths @(
-    (Split-Path -Parent $paths.SharePointLedgerPath),
+    (Split-Path -Parent $paths.SharePointTablePath),
     $paths.SharePointCaseRoot,
     $paths.MailArchiveRoot,
     $paths.JsonRoot
 )
 
-Write-ShinsaJson -Path $paths.SharePointLedgerPath -Data @(
+Write-ShinsaJson -Path $paths.SharePointTablePath -Data @(
     [pscustomobject]@{
         case_id = 'CASE-0001'
         receipt_no = 'R-2026-0001'

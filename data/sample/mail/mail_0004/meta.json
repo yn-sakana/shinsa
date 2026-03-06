@@ -1,0 +1,13 @@
+{
+    "mail_id": "MAIL-0004",
+    "entry_id": "ENTRY-0004",
+    "mailbox_address": "grants@example.org",
+    "folder_path": "Inbox/Grant Applications",
+    "received_at": "2026-03-03T16:30:00+09:00",
+    "sender_name": "Kenji Suzuki",
+    "sender_email": "suzuki@example.org",
+    "subject": "Partial submission - budget plan to follow",
+    "body_path": "body.txt",
+    "msg_path": "",
+    "attachment_paths": []
+}
