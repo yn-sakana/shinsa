@@ -16,10 +16,6 @@
     "key_column": "case_id",
     "sheet_name": "",
     "header_row": 1,
-    "editable_columns": ["status", "assigned_to", "missing_documents", "review_note_public"],
-    "multiline_columns": ["missing_documents", "review_note_public"],
-    "display_columns": ["case_id", "organization_name", "status"],
-    "detail_columns": ["case_id", "receipt_no", "organization_name", "contact_name", "contact_email", "status", "assigned_to", "missing_documents", "review_note_public"],
     "columns": {
       "case_id": "case_id",
       "receipt_no": "receipt_no",
@@ -32,6 +28,32 @@
       "review_note_public": "review_note_public"
     }
   },
+  "sources": [
+    {
+      "name": "table",
+      "file": "table.json",
+      "view": "fields",
+      "display_columns": ["case_id", "organization_name", "status"],
+      "detail_columns": ["case_id", "receipt_no", "organization_name", "contact_name", "contact_email", "status", "assigned_to", "missing_documents", "review_note_public"],
+      "editable_columns": ["status", "assigned_to", "missing_documents", "review_note_public"],
+      "multiline_columns": ["missing_documents", "review_note_public"]
+    },
+    {
+      "name": "mail",
+      "file": "mails.json",
+      "view": "mail",
+      "display_columns": ["received_at", "sender_email", "subject"]
+    },
+    {
+      "name": "folder",
+      "file": "folders.json",
+      "view": "tree",
+      "display_columns": ["file_name"],
+      "tree_group_key": "folder_path",
+      "tree_relative_path": "relative_path",
+      "tree_full_path": "file_path"
+    }
+  ],
   "gui": {
     "title": "shinsa",
     "font_name": "Yu Gothic UI",
