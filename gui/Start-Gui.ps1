@@ -14,19 +14,11 @@ $script:Paths = Get-ShinsaDataPaths -Config $script:Config
 
 Ensure-ShinsaState -Paths $script:Paths
 
-# Auto-sync on startup if any source JSON missing
-$needsSync = $false
-foreach ($name in (Get-ShinsaSourceNames -Config $script:Config)) {
-    $src = $script:Config.sources[$name]
-    $jp = Join-Path $script:Paths.JsonRoot $src.file
-    if (-not (Test-Path $jp)) { $needsSync = $true; break }
-}
-if ($needsSync) {
-    try { & (Join-Path $script:AppRoot 'scripts\Sync-Data.ps1') }
-    catch {
-        [System.Windows.Forms.MessageBox]::Show("Sync failed: $($_.Exception.Message)", 'shinsa') | Out-Null
-        exit 1
-    }
+# Always sync on startup
+try { & (Join-Path $script:AppRoot 'scripts\Sync-Data.ps1') }
+catch {
+    [System.Windows.Forms.MessageBox]::Show("Sync failed: $($_.Exception.Message)", 'shinsa') | Out-Null
+    exit 1
 }
 
 # --- Style ---
