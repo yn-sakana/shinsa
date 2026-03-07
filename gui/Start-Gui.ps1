@@ -370,7 +370,7 @@ function Show-SettingsDialog {
     $colInList = New-Object System.Windows.Forms.DataGridViewCheckBoxColumn; $colInList.Name = 'InList'; $colInList.HeaderText = 'List'; $colInList.FillWeight = 10
     $colEdit = New-Object System.Windows.Forms.DataGridViewCheckBoxColumn; $colEdit.Name = 'Editable'; $colEdit.HeaderText = 'Edit'; $colEdit.FillWeight = 10
     $colMulti = New-Object System.Windows.Forms.DataGridViewCheckBoxColumn; $colMulti.Name = 'Multiline'; $colMulti.HeaderText = 'Multi'; $colMulti.FillWeight = 10
-    [void]$dgvFields.Columns.AddRange(@($colName, $colType, $colInList, $colEdit, $colMulti))
+    [void]$dgvFields.Columns.AddRange([System.Windows.Forms.DataGridViewColumn[]]@($colName, $colType, $colInList, $colEdit, $colMulti))
 
     $tabSources.Controls.Add($dgvFields)
     $tabSources.Controls.Add($srcTopPanel)
