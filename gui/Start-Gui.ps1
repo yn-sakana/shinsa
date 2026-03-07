@@ -296,9 +296,6 @@ function Invoke-GuiWriteback {
     if (-not $name) { return }
     Save-CurrentRecord
 
-    # Smart sync first to get latest remote
-    Invoke-GuiSync
-
     $editCols = Get-EditableColumns $name
     if ($editCols.Count -eq 0) {
         [System.Windows.Forms.MessageBox]::Show("Source '$name' has no editable columns.", 'shinsa') | Out-Null
