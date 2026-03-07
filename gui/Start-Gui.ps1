@@ -688,14 +688,32 @@ $logPanel = New-Object System.Windows.Forms.Panel
 $logPanel.Dock = 'Fill'
 $logPanel.BackColor = $script:BgColor
 
+$logHeader = New-Object System.Windows.Forms.Panel
+$logHeader.Dock = 'Top'
+$logHeader.Height = 26
+$logHeader.BackColor = $script:BgColor
+
 $logLabel = New-Object System.Windows.Forms.Label
 $logLabel.Text = 'Change Log'
-$logLabel.Dock = 'Top'
-$logLabel.Height = 22
+$logLabel.Dock = 'Fill'
 $logLabel.TextAlign = 'MiddleLeft'
 $logLabel.Font = New-Object System.Drawing.Font($script:Font, [System.Drawing.FontStyle]::Bold)
-$logLabel.BackColor = $script:BgColor
 $logLabel.Padding = New-Object System.Windows.Forms.Padding(2, 0, 0, 0)
+
+$btnLogClear = New-Object System.Windows.Forms.Button
+$btnLogClear.Text = 'Clear'
+$btnLogClear.Dock = 'Right'
+$btnLogClear.Width = 50
+$btnLogClear.FlatStyle = 'Flat'
+$btnLogClear.Font = $script:Font
+$btnLogClear.Add_Click({
+    $logList.Items.Clear()
+    $logPath = Join-Path $script:Paths.JsonRoot 'changelog.jsonl'
+    if (Test-Path $logPath) { Remove-Item $logPath -Force }
+})
+
+$logHeader.Controls.Add($logLabel)
+$logHeader.Controls.Add($btnLogClear)
 
 $logList = New-Object System.Windows.Forms.ListBox
 $logList.Dock = 'Fill'
@@ -704,7 +722,7 @@ $logList.IntegralHeight = $false
 $logList.BorderStyle = 'Fixed3D'
 
 $logPanel.Controls.Add($logList)
-$logPanel.Controls.Add($logLabel)
+$logPanel.Controls.Add($logHeader)
 
 $outerSplit.Panel1.Controls.Add($mainSplit)
 $outerSplit.Panel2.Controls.Add($logPanel)
