@@ -252,14 +252,15 @@ function Flush-EditorToMemory {
 }
 
 function Save-AllDirtyToJson {
-    # Flush editor to memory, then write JSON for all sources with local diffs
+    # Flush editor to memory, then write JSON only if dirty
+    if (-not $script:dirty) { return }
     Flush-EditorToMemory
-    foreach ($name in @($script:allData.Keys)) {
-        $src = Get-SourceConfig $name
-        if (-not $src) { continue }
-        $jp = Join-Path $script:Paths.JsonRoot $src.file
-        Write-ShinsaJson -Path $jp -Data $script:allData[$name]
-    }
+    $name = $script:currentSourceName
+    if (-not $name) { return }
+    $src = Get-SourceConfig $name
+    if (-not $src) { return }
+    $jp = Join-Path $script:Paths.JsonRoot $src.file
+    Write-ShinsaJson -Path $jp -Data $script:allData[$name]
 }
 
 function Get-SnapshotDiffs {
@@ -1569,9 +1570,12 @@ $syncAutoEnabled = if ($syncCfg.Contains('auto_sync')) { [bool]$syncCfg['auto_sy
 
 $syncTimer.Add_Tick({
     try {
+        $syncTimer.Stop()
         Invoke-PollCycle
     } catch {
         $statusBar.Text = "Poll error: $($_.Exception.Message)"
+    } finally {
+        $syncTimer.Start()
     }
 })
 
