@@ -305,6 +305,8 @@ function Get-SnapshotDiffs {
 
 function Invoke-AutoReflect {
     # For each fields-view source: snapshot diff → write to Excel + log
+    # Returns $true if any diffs were reflected
+    $anyReflected = $false
     $logPath = Join-Path $script:Paths.JsonRoot 'changelog.jsonl'
     foreach ($name in @($script:allData.Keys)) {
         $diffs = @(Get-SnapshotDiffs $name)
@@ -357,7 +359,9 @@ function Invoke-AutoReflect {
         $jp = Join-Path $script:Paths.JsonRoot $src.file
         $snapshotPath = ($jp -replace '\.json$', '.snapshot.json')
         Write-ShinsaJson -Path $snapshotPath -Data $script:allData[$name]
+        $anyReflected = $true
     }
+    return $anyReflected
 }
 
 function Invoke-GuiSync {
@@ -378,10 +382,9 @@ function Invoke-GuiSync {
 function Invoke-PollCycle {
     # 1. Flush editor edits to memory + save JSON
     Save-AllDirtyToJson
-    # 2. Auto-reflect: snapshot diff → Excel writeback + log
-    Invoke-AutoReflect
-    # 3. Sync: remote changes → local (3-way merge)
-    $changed = $false
+
+    # 2. Check for remote changes
+    $remoteChanged = $false
     foreach ($name in (Get-ShinsaSourceNames -Config $script:Config)) {
         $path = Get-ShinsaSourcePath -Config $script:Config -SourceName $name
         if (-not $path -or -not (Test-Path $path)) { continue }
@@ -392,12 +395,26 @@ function Invoke-PollCycle {
         } else { $item.LastWriteTime }
         $lastKnown = $script:lastSourceTimestamps[$name]
         if ($null -eq $lastKnown -or $ts -gt $lastKnown) {
-            $changed = $true
+            $remoteChanged = $true
             break
         }
     }
-    if ($changed) {
+
+    # 3. Sync remote → local (3-way merge preserves local edits)
+    if ($remoteChanged) {
         Invoke-GuiSync
+    }
+
+    # 4. Auto-reflect: snapshot diff → Excel writeback + log
+    $reflected = Invoke-AutoReflect
+
+    # 5. Update timestamps (after our own Excel writes)
+    Initialize-SourceTimestamps
+
+    # 6. Refresh UI if anything changed
+    if ($reflected -and -not $remoteChanged) {
+        Load-ChangeLog
+        $statusBar.Text = "Reflected at $(Get-Date -Format 'HH:mm:ss')"
     }
 }
 
