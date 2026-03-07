@@ -243,16 +243,17 @@ function Flush-EditorToMemory {
     $script:dirty = $false
 }
 
-function Save-AllDirtyToJson {
-    # Flush editor to memory, then write JSON only if dirty
-    if (-not $script:dirty) { return }
+function Save-DirtyToJson {
+    # Flush editor to memory, write JSON only for the edited source
+    if (-not $script:dirty) { return $false }
     Flush-EditorToMemory
     $name = $script:currentSourceName
-    if (-not $name) { return }
+    if (-not $name) { return $false }
     $src = Get-SourceConfig $name
-    if (-not $src) { return }
+    if (-not $src) { return $false }
     $jp = Join-Path $script:Paths.JsonRoot $src.file
     Write-ShinsaJson -Path $jp -Data $script:allData[$name]
+    return $true
 }
 
 function Get-SnapshotDiffs {
@@ -373,8 +374,11 @@ function Invoke-GuiSync {
 }
 
 function Invoke-PollCycle {
-    # 1. Flush editor edits to memory + save JSON
-    Save-AllDirtyToJson
+    $ts = Get-Date -Format 'HH:mm:ss'
+
+    # 1. Flush editor edits to memory
+    $wasDirty = $script:dirty
+    Flush-EditorToMemory
 
     # 2. Check for remote changes
     $remoteChanged = $false
@@ -383,11 +387,11 @@ function Invoke-PollCycle {
         if (-not $path -or -not (Test-Path $path)) { continue }
         $item = Get-Item $path -ErrorAction SilentlyContinue
         if (-not $item) { continue }
-        $ts = if ($item.PSIsContainer) {
+        $itemTs = if ($item.PSIsContainer) {
             try { (Get-ChildItem $path -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property LastWriteTime -Maximum).Maximum } catch { $item.LastWriteTime }
         } else { $item.LastWriteTime }
         $lastKnown = $script:lastSourceTimestamps[$name]
-        if ($null -eq $lastKnown -or $ts -gt $lastKnown) {
+        if ($null -eq $lastKnown -or $itemTs -gt $lastKnown) {
             $remoteChanged = $true
             break
         }
@@ -395,6 +399,8 @@ function Invoke-PollCycle {
 
     # 3. Sync remote → local (3-way merge preserves local edits)
     if ($remoteChanged) {
+        # Save to JSON before sync so 3-way merge can see local edits
+        Save-DirtyToJson
         Invoke-GuiSync
     }
 
@@ -404,10 +410,14 @@ function Invoke-PollCycle {
     # 5. Update timestamps (after our own Excel writes)
     Initialize-SourceTimestamps
 
-    # 6. Refresh UI if anything changed
-    if ($reflected -and -not $remoteChanged) {
+    # 6. Status
+    if ($reflected) {
         Load-ChangeLog
-        $statusBar.Text = "Reflected at $(Get-Date -Format 'HH:mm:ss')"
+        $statusBar.Text = "Reflected at $ts"
+    } elseif ($remoteChanged) {
+        # Already updated by Invoke-GuiSync
+    } elseif ($wasDirty) {
+        $statusBar.Text = "Saved at $ts"
     }
 }
 
@@ -1721,7 +1731,7 @@ $form.Add_Shown({
 
 $form.Add_FormClosing({
     $syncTimer.Stop()
-    try { Save-AllDirtyToJson; Invoke-AutoReflect } catch { }
+    try { Flush-EditorToMemory; Invoke-AutoReflect } catch { }
     Save-UiState
 })
 
