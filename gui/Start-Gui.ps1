@@ -232,51 +232,135 @@ function Load-AllData {
     $script:cacheState = Read-ShinsaCache -Paths $script:Paths
 }
 
-function Save-SourceData {
-    param([string]$Name, [switch]$Quiet)
-    $editableCols = Get-EditableColumns $Name
-    if ($editableCols.Count -eq 0) { return }
+function Flush-EditorToMemory {
+    # Write editor values to in-memory records (no file I/O, no log)
+    $name = $script:currentSourceName
+    if (-not $name -or -not $script:dirty) { return }
+    $editableCols = Get-EditableColumns $name
+    if ($editableCols.Count -eq 0) { $script:dirty = $false; return }
 
     $recIdx = $script:currentRecordIndex
-    if ($recIdx -lt 0 -or $recIdx -ge $script:allData[$Name].Count) { return }
-    $rec = $script:allData[$Name][$recIdx]
-    $src = Get-SourceConfig $Name
-    $keyColumn = if ($null -ne $src.key_column) { [string]$src.key_column } else { '' }
-    $keyValue = if (-not [string]::IsNullOrWhiteSpace($keyColumn)) { ConvertTo-ShinsaString -Value (Get-ShinsaRecordValue -Record $rec -Name $keyColumn) } else { '' }
-    $logPath = Join-Path $script:Paths.JsonRoot 'changelog.jsonl'
+    if ($recIdx -lt 0 -or $recIdx -ge $script:allData[$name].Count) { return }
+    $rec = $script:allData[$name][$recIdx]
 
-    $changed = $false
     foreach ($fn in $editableCols) {
         if (-not $script:fieldEditors.ContainsKey($fn)) { continue }
         $newVal = $script:fieldEditors[$fn].Text.Trim()
-        $oldVal = ConvertTo-ShinsaString -Value (Get-ShinsaRecordValue -Record $rec -Name $fn)
-        if ($newVal -ne $oldVal) {
-            # Push to undo stack
-            if ($script:undoStack.Count -ge $script:undoMaxSize) { $script:undoStack.RemoveAt(0) }
-            [void]$script:undoStack.Add(@{ source = $Name; key = $keyValue; field = $fn; oldValue = $oldVal; newValue = $newVal })
-            # Log
-            Write-ShinsaChangeLog -LogPath $logPath -SourceName $Name -KeyValue $keyValue -FieldName $fn -OldValue $oldVal -NewValue $newVal -Origin 'local'
-            Add-LogEntry ([pscustomobject]@{ ts = (Get-Date).ToString('o'); src = $Name; key = $keyValue; field = $fn; old = $oldVal; new = $newVal; origin = 'local' })
-            Set-ShinsaRecordValue -Record $rec -Name $fn -Value $newVal
-            $changed = $true
-        }
-    }
-    if ($changed) {
-        $jp = Join-Path $script:Paths.JsonRoot $src.file
-        Write-ShinsaJson -Path $jp -Data $script:allData[$Name]
+        Set-ShinsaRecordValue -Record $rec -Name $fn -Value $newVal
     }
     $script:dirty = $false
-    if (-not $Quiet -and $changed) { $statusBar.Text = 'Saved.' }
 }
 
-function Save-CurrentRecord {
-    $name = $script:currentSourceName
-    if (-not $name) { return }
-    Save-SourceData $name -Quiet
+function Save-AllDirtyToJson {
+    # Flush editor to memory, then write JSON for all sources with local diffs
+    Flush-EditorToMemory
+    foreach ($name in @($script:allData.Keys)) {
+        $src = Get-SourceConfig $name
+        if (-not $src) { continue }
+        $jp = Join-Path $script:Paths.JsonRoot $src.file
+        Write-ShinsaJson -Path $jp -Data $script:allData[$name]
+    }
+}
+
+function Get-SnapshotDiffs {
+    # Compare JSON vs snapshot for each fields-view source, return diffs
+    param([string]$SourceName)
+    $src = Get-SourceConfig $SourceName
+    $srcMap = ConvertTo-ShinsaMap -InputObject $src
+    $view = if ($srcMap.Contains('view')) { [string]$srcMap['view'] } else { 'fields' }
+    if ($view -ne 'fields') { return @() }
+
+    $keyColumn = if ($srcMap.Contains('key_column')) { [string]$srcMap['key_column'] } else { '' }
+    if ([string]::IsNullOrWhiteSpace($keyColumn)) { return @() }
+
+    $jp = Join-Path $script:Paths.JsonRoot $src.file
+    $snapshotPath = ($jp -replace '\.json$', '.snapshot.json')
+    if (-not (Test-Path $snapshotPath)) { return @() }
+
+    $currentRecords = $script:allData[$SourceName]
+    $snapshotRecords = @(Read-ShinsaJson -Path $snapshotPath)
+    $editableCols = Get-EditableColumns $SourceName
+
+    $snapByKey = @{}
+    foreach ($r in $snapshotRecords) {
+        $k = ConvertTo-ShinsaString -Value (Get-ShinsaRecordValue -Record $r -Name $keyColumn)
+        if ($k) { $snapByKey[$k] = $r }
+    }
+
+    $diffs = @()
+    foreach ($r in $currentRecords) {
+        $k = ConvertTo-ShinsaString -Value (Get-ShinsaRecordValue -Record $r -Name $keyColumn)
+        if (-not $k -or -not $snapByKey.ContainsKey($k)) { continue }
+        $snapRec = $snapByKey[$k]
+        foreach ($fn in $editableCols) {
+            $cur = ConvertTo-ShinsaString -Value (Get-ShinsaRecordValue -Record $r -Name $fn)
+            $snap = ConvertTo-ShinsaString -Value (Get-ShinsaRecordValue -Record $snapRec -Name $fn)
+            if ($cur -ne $snap) {
+                $diffs += @{ key = $k; field = $fn; old = $snap; new = $cur; row_id = (Get-ShinsaRecordValue -Record $r -Name '_source_row_id') }
+            }
+        }
+    }
+    return $diffs
+}
+
+function Invoke-AutoReflect {
+    # For each fields-view source: snapshot diff → write to Excel + log
+    $logPath = Join-Path $script:Paths.JsonRoot 'changelog.jsonl'
+    foreach ($name in @($script:allData.Keys)) {
+        $diffs = @(Get-SnapshotDiffs $name)
+        if ($diffs.Count -eq 0) { continue }
+
+        $src = Get-SourceConfig $name
+        $srcMap = ConvertTo-ShinsaMap -InputObject $src
+        $keyColumn = if ($srcMap.Contains('key_column')) { [string]$srcMap['key_column'] } else { '' }
+        $sourcePath = Get-ShinsaSourcePath -Config $script:Config -SourceName $name
+        if (-not $sourcePath -or -not (Test-Path $sourcePath)) { continue }
+
+        # Build writeback plan from diffs
+        $changesByKey = [ordered]@{}
+        foreach ($d in $diffs) {
+            if (-not $changesByKey.Contains($d.key)) {
+                $changesByKey[$d.key] = @{ row_id = $d.row_id; changes = [ordered]@{} }
+            }
+            $changesByKey[$d.key].changes[$d.field] = [ordered]@{ from = $d.old; to = $d.new }
+        }
+        $changes = @()
+        foreach ($k in $changesByKey.Keys) {
+            $c = $changesByKey[$k]
+            $changes += [pscustomobject]@{
+                key_value = $k
+                row_id = [int]$c.row_id
+                changes = [pscustomobject]$c.changes
+            }
+        }
+        $changeCount = ($diffs.Count)
+        $ext = [System.IO.Path]::GetExtension($sourcePath).ToLowerInvariant()
+        $plan = [pscustomobject]@{
+            source_name = $name; source_kind = $ext; key_column = $keyColumn
+            changes = $changes; change_count = $changeCount; case_count = $changes.Count
+        }
+
+        try {
+            Invoke-ShinsaWriteback -Config $script:Config -SourceName $name -Plan $plan
+        } catch {
+            $statusBar.Text = "Reflect error ($name): $($_.Exception.Message)"
+            continue
+        }
+
+        # Log + UI
+        foreach ($d in $diffs) {
+            Write-ShinsaChangeLog -LogPath $logPath -SourceName $name -KeyValue $d.key -FieldName $d.field -OldValue $d.old -NewValue $d.new -Origin 'local'
+            Add-LogEntry ([pscustomobject]@{ ts = (Get-Date).ToString('o'); src = $name; key = $d.key; field = $d.field; old = $d.old; new = $d.new; origin = 'local' })
+        }
+
+        # Update snapshot
+        $jp = Join-Path $script:Paths.JsonRoot $src.file
+        $snapshotPath = ($jp -replace '\.json$', '.snapshot.json')
+        Write-ShinsaJson -Path $snapshotPath -Data $script:allData[$name]
+    }
 }
 
 function Invoke-GuiSync {
-    Save-CurrentRecord
     $statusBar.Text = 'Syncing...'
     $form.Refresh()
     $conflicts = @(& (Join-Path $script:AppRoot 'scripts\Sync-Data.ps1'))
@@ -291,42 +375,30 @@ function Invoke-GuiSync {
     $statusBar.Text = "Synced at $(Get-Date -Format 'HH:mm:ss')"
 }
 
-function Invoke-GuiWriteback {
-    $name = [string]$cmbSource.SelectedItem
-    if (-not $name) { return }
-    Save-CurrentRecord
-
-    $editCols = Get-EditableColumns $name
-    if ($editCols.Count -eq 0) {
-        [System.Windows.Forms.MessageBox]::Show("Source '$name' has no editable columns.", 'shinsa') | Out-Null
-        return
+function Invoke-PollCycle {
+    # 1. Flush editor edits to memory + save JSON
+    Save-AllDirtyToJson
+    # 2. Auto-reflect: snapshot diff → Excel writeback + log
+    Invoke-AutoReflect
+    # 3. Sync: remote changes → local (3-way merge)
+    $changed = $false
+    foreach ($name in (Get-ShinsaSourceNames -Config $script:Config)) {
+        $path = Get-ShinsaSourcePath -Config $script:Config -SourceName $name
+        if (-not $path -or -not (Test-Path $path)) { continue }
+        $item = Get-Item $path -ErrorAction SilentlyContinue
+        if (-not $item) { continue }
+        $ts = if ($item.PSIsContainer) {
+            try { (Get-ChildItem $path -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property LastWriteTime -Maximum).Maximum } catch { $item.LastWriteTime }
+        } else { $item.LastWriteTime }
+        $lastKnown = $script:lastSourceTimestamps[$name]
+        if ($null -eq $lastKnown -or $ts -gt $lastKnown) {
+            $changed = $true
+            break
+        }
     }
-
-    $plan = Get-ShinsaWritebackPlan -Config $script:Config -Paths $script:Paths -SourceName $name
-    if ($plan.case_count -eq 0) {
-        [System.Windows.Forms.MessageBox]::Show('No changes to reflect.', 'shinsa') | Out-Null; return
+    if ($changed) {
+        Invoke-GuiSync
     }
-    $lines = @()
-    foreach ($c in @($plan.changes)) { $lines += ('{0}: {1}' -f $c.key_value, (@($c.changes.PSObject.Properties.Name) -join ', ')) }
-    $msg = "Reflect {0} record(s) / {1} field(s) to source?`n`n{2}" -f $plan.case_count, $plan.change_count, ($lines -join "`n")
-    $r = [System.Windows.Forms.MessageBox]::Show($msg, 'shinsa', 'OKCancel', 'Question')
-    if ($r -ne 'OK') { return }
-    Invoke-ShinsaWriteback -Config $script:Config -SourceName $name -Plan $plan
-
-    $src = Get-SourceConfig $name
-    $sourcePath = Get-ShinsaSourcePath -Config $script:Config -SourceName $name
-    $refreshed = @(Import-ShinsaFieldsRecords -SourceConfig $src -SourcePath $sourcePath)
-    $jp = Join-Path $script:Paths.JsonRoot $src.file
-    Write-ShinsaJson -Path $jp -Data $refreshed
-    $script:allData[$name] = $refreshed
-
-    # Update snapshot after reflect
-    $snapshotPath = ($jp -replace '\.json$', '.snapshot.json')
-    Write-ShinsaJson -Path $snapshotPath -Data $refreshed
-
-    Initialize-SourceTimestamps
-    Update-RecordList
-    $statusBar.Text = 'Reflected to source.'
 }
 
 # =============================================================================
@@ -614,14 +686,12 @@ $menuBar.BackColor = $script:BgColor
 $menuFile = New-Object System.Windows.Forms.ToolStripMenuItem('File(&F)')
 $menuSync = New-Object System.Windows.Forms.ToolStripMenuItem('Reload from sources')
 $menuSync.ShortcutKeys = [System.Windows.Forms.Keys]::F5
-$menuReflect = New-Object System.Windows.Forms.ToolStripMenuItem('Reflect to source...')
-$menuReflect.ShortcutKeys = [System.Windows.Forms.Keys]::Control -bor [System.Windows.Forms.Keys]::W
 $menuSep1 = New-Object System.Windows.Forms.ToolStripSeparator
 $menuSettings = New-Object System.Windows.Forms.ToolStripMenuItem('Settings...')
 $menuSep2 = New-Object System.Windows.Forms.ToolStripSeparator
 $menuQuit = New-Object System.Windows.Forms.ToolStripMenuItem('Quit')
 $menuQuit.ShortcutKeys = [System.Windows.Forms.Keys]::Alt -bor [System.Windows.Forms.Keys]::F4
-[void]$menuFile.DropDownItems.AddRange(@($menuSync, $menuReflect, $menuSep1, $menuSettings, $menuSep2, $menuQuit))
+[void]$menuFile.DropDownItems.AddRange(@($menuSync, $menuSep1, $menuSettings, $menuSep2, $menuQuit))
 [void]$menuBar.Items.Add($menuFile)
 $form.MainMenuStrip = $menuBar
 
@@ -633,11 +703,9 @@ $toolbar.Renderer = New-Object System.Windows.Forms.ToolStripSystemRenderer
 
 $tsbSync = New-Object System.Windows.Forms.ToolStripButton('Sync')
 $tsbSync.DisplayStyle = 'Text'
-$tsbReflect = New-Object System.Windows.Forms.ToolStripButton('Reflect')
-$tsbReflect.DisplayStyle = 'Text'
 $tsbSettings = New-Object System.Windows.Forms.ToolStripButton('Settings')
 $tsbSettings.DisplayStyle = 'Text'
-[void]$toolbar.Items.AddRange(@($tsbSync, (New-Object System.Windows.Forms.ToolStripSeparator), $tsbReflect, (New-Object System.Windows.Forms.ToolStripSeparator), $tsbSettings))
+[void]$toolbar.Items.AddRange(@($tsbSync, (New-Object System.Windows.Forms.ToolStripSeparator), $tsbSettings))
 
 # --- Outer split (left+center | right log) ---
 $outerSplit = New-Object System.Windows.Forms.SplitContainer
@@ -1022,7 +1090,6 @@ function Add-FieldEditorsToPanel {
             $txt.Add_TextChanged({
                 if ($script:loading) { return }
                 $script:dirty = $true
-                Save-CurrentRecord
             })
         }
         $tbl.Controls.Add($txt, 1, $i)
@@ -1485,26 +1552,9 @@ $syncAutoEnabled = if ($syncCfg.Contains('auto_sync')) { [bool]$syncCfg['auto_sy
 
 $syncTimer.Add_Tick({
     try {
-        $changed = $false
-        foreach ($name in (Get-ShinsaSourceNames -Config $script:Config)) {
-            $path = Get-ShinsaSourcePath -Config $script:Config -SourceName $name
-            if (-not $path -or -not (Test-Path $path)) { continue }
-            $item = Get-Item $path -ErrorAction SilentlyContinue
-            if (-not $item) { continue }
-            $ts = if ($item.PSIsContainer) {
-                try { (Get-ChildItem $path -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property LastWriteTime -Maximum).Maximum } catch { $item.LastWriteTime }
-            } else { $item.LastWriteTime }
-            $lastKnown = $script:lastSourceTimestamps[$name]
-            if ($null -eq $lastKnown -or $ts -gt $lastKnown) {
-                $changed = $true
-                break
-            }
-        }
-        if ($changed) {
-            Invoke-GuiSync
-        }
+        Invoke-PollCycle
     } catch {
-        $statusBar.Text = "Auto-sync error: $($_.Exception.Message)"
+        $statusBar.Text = "Poll error: $($_.Exception.Message)"
     }
 })
 
@@ -1597,13 +1647,11 @@ $form.Add_KeyDown({
     if ($e.Control -and $e.KeyCode -eq 'Z') { Invoke-Undo; $e.Handled = $true; $e.SuppressKeyPress = $true }
 })
 
-$menuSync.Add_Click({ try { Invoke-GuiSync } catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, 'shinsa') | Out-Null } })
-$menuReflect.Add_Click({ try { Invoke-GuiWriteback } catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, 'shinsa') | Out-Null } })
+$menuSync.Add_Click({ try { Invoke-PollCycle } catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, 'shinsa') | Out-Null } })
 $menuSettings.Add_Click({ try { Show-SettingsDialog } catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, 'shinsa') | Out-Null } })
 $menuQuit.Add_Click({ $form.Close() })
 
-$tsbSync.Add_Click({ try { Invoke-GuiSync } catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, 'shinsa') | Out-Null } })
-$tsbReflect.Add_Click({ try { Invoke-GuiWriteback } catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, 'shinsa') | Out-Null } })
+$tsbSync.Add_Click({ try { Invoke-PollCycle } catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, 'shinsa') | Out-Null } })
 $tsbSettings.Add_Click({ try { Show-SettingsDialog } catch { [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, 'shinsa') | Out-Null } })
 
 # =============================================================================
@@ -1660,7 +1708,7 @@ $form.Add_Shown({
 
 $form.Add_FormClosing({
     $syncTimer.Stop()
-    Save-CurrentRecord
+    try { Save-AllDirtyToJson; Invoke-AutoReflect } catch { }
     Save-UiState
 })
 
