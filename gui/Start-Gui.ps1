@@ -28,7 +28,6 @@ $script:Font = New-Object System.Drawing.Font($script:Config.gui.font_name, [sin
 $script:MonoFont = New-Object System.Drawing.Font('Consolas', 10)
 
 # --- Data ---
-$script:allData = [ordered]@{}
 $script:fieldEditors = @{}
 $script:filteredIndices = @()
 $script:cacheState = $null
@@ -41,6 +40,25 @@ $script:currentRecordIndex = -1
 $script:undoStack = [System.Collections.ArrayList]::new()
 $script:undoMaxSize = 50
 $script:lastSourceTimestamps = @{}
+
+# --- JSON I/O helpers ---
+
+function Read-SourceRecords {
+    param([string]$Name)
+    $src = $script:Config.sources[$Name]
+    if (-not $src) { return @() }
+    $jp = Join-Path $script:Paths.JsonRoot $src.file
+    if (Test-Path $jp) { return @(Read-ShinsaJson -Path $jp) }
+    return @()
+}
+
+function Write-SourceRecords {
+    param([string]$Name, [array]$Records)
+    $src = $script:Config.sources[$Name]
+    if (-not $src) { return }
+    $jp = Join-Path $script:Paths.JsonRoot $src.file
+    Write-ShinsaJson -Path $jp -Data $Records
+}
 
 # --- Helpers ---
 
@@ -139,7 +157,7 @@ function Ensure-FieldSettings {
     param([string]$Name)
     $fs = Get-ShinsaFieldSettings -Cache $script:cacheState -SourceName $Name
     if ($fs.Count -eq 0) {
-        $records = if ($script:allData.Contains($Name)) { @($script:allData[$Name]) } else { @() }
+        $records = @(Read-SourceRecords $Name)
         $fs = Initialize-ShinsaFieldSettings -Config $script:Config -Cache $script:cacheState -SourceName $Name -Records $records
         Save-ShinsaCache -Paths $script:Paths -Cache $script:cacheState
     }
@@ -152,8 +170,8 @@ function Get-DisplayColumns {
     $cols = @($fs.Keys | Where-Object { $fsm = ConvertTo-ShinsaMap -InputObject $fs[$_]; $fsm.Contains('in_list') -and $fsm['in_list'] -eq $true })
     if ($cols.Count -gt 0) { return $cols }
     # Fallback
-    $recs = $script:allData[$Name]
-    if ($recs -and $recs.Count -gt 0) { return @($recs[0].PSObject.Properties | Where-Object { $_.Name -notlike '_*' } | Select-Object -First 3 | ForEach-Object { $_.Name }) }
+    $recs = Read-SourceRecords $Name
+    if ($recs.Count -gt 0) { return @($recs[0].PSObject.Properties | Where-Object { $_.Name -notlike '_*' } | Select-Object -First 3 | ForEach-Object { $_.Name }) }
     return @()
 }
 
@@ -161,8 +179,8 @@ function Get-DetailColumns {
     param([string]$Name)
     $fs = Ensure-FieldSettings $Name
     if ($fs.Count -gt 0) { return @($fs.Keys) }
-    $recs = $script:allData[$Name]
-    if ($recs -and $recs.Count -gt 0) {
+    $recs = Read-SourceRecords $Name
+    if ($recs.Count -gt 0) {
         return @($recs[0].PSObject.Properties | Where-Object { $_.Name -notlike '_*' } | ForEach-Object { $_.Name })
     }
     return @()
@@ -210,50 +228,38 @@ function Set-SafeSplitterLayout {
     $Ctl.SplitterDistance = [Math]::Max($Ctl.Panel1MinSize, [Math]::Min($Preferred, $max))
 }
 
-function Load-AllData {
-    $script:allData = [ordered]@{}
-    foreach ($name in (Get-ShinsaSourceNames -Config $script:Config)) {
-        $src = $script:Config.sources[$name]
-        $jp = Join-Path $script:Paths.JsonRoot $src.file
-        if (Test-Path $jp) {
-            $script:allData[$name] = @((Read-ShinsaJson -Path $jp))
-        } else {
-            $script:allData[$name] = @()
-        }
-    }
+function Reload-Cache {
     $script:cacheState = Read-ShinsaCache -Paths $script:Paths
 }
 
-function Flush-EditorToMemory {
-    # Write editor values to in-memory records (no file I/O, no log)
+function Save-CurrentEdits {
+    # Write editor values directly to JSON (single atomic operation)
     $name = $script:currentSourceName
-    if (-not $name -or -not $script:dirty) { return }
+    if (-not $name -or -not $script:dirty) { return $false }
     $editableCols = Get-EditableColumns $name
-    if ($editableCols.Count -eq 0) { $script:dirty = $false; return }
+    if ($editableCols.Count -eq 0) { $script:dirty = $false; return $false }
 
     $recIdx = $script:currentRecordIndex
-    if ($recIdx -lt 0 -or $recIdx -ge $script:allData[$name].Count) { return }
-    $rec = $script:allData[$name][$recIdx]
+    $records = Read-SourceRecords $name
+    if ($recIdx -lt 0 -or $recIdx -ge $records.Count) { return $false }
+    $rec = $records[$recIdx]
 
+    $changed = $false
     foreach ($fn in $editableCols) {
         if (-not $script:fieldEditors.ContainsKey($fn)) { continue }
         $newVal = $script:fieldEditors[$fn].Text.Trim()
-        Set-ShinsaRecordValue -Record $rec -Name $fn -Value $newVal
+        $oldVal = ConvertTo-ShinsaString -Value (Get-ShinsaRecordValue -Record $rec -Name $fn)
+        if ($newVal -ne $oldVal) {
+            Set-ShinsaRecordValue -Record $rec -Name $fn -Value $newVal
+            $changed = $true
+        }
+    }
+
+    if ($changed) {
+        Write-SourceRecords $name $records
     }
     $script:dirty = $false
-}
-
-function Save-DirtyToJson {
-    # Flush editor to memory, write JSON only for the edited source
-    if (-not $script:dirty) { return $false }
-    Flush-EditorToMemory
-    $name = $script:currentSourceName
-    if (-not $name) { return $false }
-    $src = Get-SourceConfig $name
-    if (-not $src) { return $false }
-    $jp = Join-Path $script:Paths.JsonRoot $src.file
-    Write-ShinsaJson -Path $jp -Data $script:allData[$name]
-    return $true
+    return $changed
 }
 
 function Get-SnapshotDiffs {
@@ -271,7 +277,7 @@ function Get-SnapshotDiffs {
     $snapshotPath = ($jp -replace '\.json$', '.snapshot.json')
     if (-not (Test-Path $snapshotPath)) { return @() }
 
-    $currentRecords = $script:allData[$SourceName]
+    $currentRecords = Read-SourceRecords $SourceName
     $snapshotRecords = @(Read-ShinsaJson -Path $snapshotPath)
     $editableCols = Get-EditableColumns $SourceName
 
@@ -302,7 +308,7 @@ function Invoke-AutoReflect {
     # Returns $true if any diffs were reflected
     $anyReflected = $false
     $logPath = Join-Path $script:Paths.JsonRoot 'changelog.jsonl'
-    foreach ($name in @($script:allData.Keys)) {
+    foreach ($name in (Get-ShinsaSourceNames -Config $script:Config)) {
         $diffs = @(Get-SnapshotDiffs $name)
         if ($diffs.Count -eq 0) { continue }
 
@@ -352,7 +358,7 @@ function Invoke-AutoReflect {
         # Update snapshot
         $jp = Join-Path $script:Paths.JsonRoot $src.file
         $snapshotPath = ($jp -replace '\.json$', '.snapshot.json')
-        Write-ShinsaJson -Path $snapshotPath -Data $script:allData[$name]
+        Write-ShinsaJson -Path $snapshotPath -Data (Read-SourceRecords $name)
         $anyReflected = $true
     }
     return $anyReflected
@@ -362,7 +368,7 @@ function Invoke-GuiSync {
     $statusBar.Text = 'Syncing...'
     $form.Refresh()
     $conflicts = @(& (Join-Path $script:AppRoot 'scripts\Sync-Data.ps1'))
-    Load-AllData
+    Reload-Cache
     Load-ChangeLog
     if ($conflicts.Count -gt 0) {
         $resolved = Show-ConflictDialog -Conflicts $conflicts
@@ -376,9 +382,8 @@ function Invoke-GuiSync {
 function Invoke-PollCycle {
     $ts = Get-Date -Format 'HH:mm:ss'
 
-    # 1. Flush editor edits to memory
-    $wasDirty = $script:dirty
-    Flush-EditorToMemory
+    # 1. Save current edits to JSON
+    $saved = Save-CurrentEdits
 
     # 2. Check for remote changes
     $remoteChanged = $false
@@ -399,8 +404,6 @@ function Invoke-PollCycle {
 
     # 3. Sync remote → local (3-way merge preserves local edits)
     if ($remoteChanged) {
-        # Save to JSON before sync so 3-way merge can see local edits
-        Save-DirtyToJson
         Invoke-GuiSync
     }
 
@@ -416,7 +419,7 @@ function Invoke-PollCycle {
         $statusBar.Text = "Reflected at $ts"
     } elseif ($remoteChanged) {
         # Already updated by Invoke-GuiSync
-    } elseif ($wasDirty) {
+    } elseif ($saved) {
         $statusBar.Text = "Saved at $ts"
     }
 }
@@ -671,7 +674,7 @@ function Show-SettingsDialog {
         $script:Paths = Get-ShinsaDataPaths -Config $script:Config
         Ensure-ShinsaState -Paths $script:Paths
         & (Join-Path $script:AppRoot 'scripts\Sync-Data.ps1')
-        Load-AllData
+        Reload-Cache
 
         $prevSource = [string]$cmbSource.SelectedItem
         $cmbSource.Items.Clear()
@@ -1210,8 +1213,9 @@ function Update-DetailTab {
     $recIdx = $script:filteredIndices[$idx]
     $script:currentRecordIndex = $recIdx
     $script:currentSourceName = $SourceName
-    $rec = $script:allData[$SourceName][$recIdx]
-    Fill-FieldEditors $rec
+    $records = Read-SourceRecords $SourceName
+    if ($recIdx -ge $records.Count) { Fill-FieldEditors $null; return }
+    Fill-FieldEditors $records[$recIdx]
     $script:dirty = $false
 }
 
@@ -1226,14 +1230,15 @@ function Update-JoinedTabs {
     $primaryRec = $null
     if ($idx -ge 0 -and $idx -lt $script:filteredIndices.Count) {
         $recIdx = $script:filteredIndices[$idx]
-        $primaryRec = $script:allData[$PrimaryName][$recIdx]
+        $primaryRecords = Read-SourceRecords $PrimaryName
+        if ($recIdx -lt $primaryRecords.Count) { $primaryRec = $primaryRecords[$recIdx] }
     }
 
     foreach ($jName in @($script:joinedTabs.Keys)) {
         $jInfo = $script:joinedTabs[$jName]
         $jSrcMap = $jInfo.srcMap
         $joinConfig = if ($jSrcMap.Contains('join')) { $jSrcMap['join'] } else { $null }
-        $jRecords = $script:allData[$jName]
+        $jRecords = Read-SourceRecords $jName
 
         $matched = @()
         if ($null -ne $primaryRec -and $null -ne $joinConfig -and $null -ne $jRecords -and $jRecords.Count -gt 0) {
@@ -1332,7 +1337,7 @@ function Update-RecordList {
         return
     }
 
-    $records = $script:allData[$name]
+    $records = Read-SourceRecords $name
     $displayCols = Get-DisplayColumns $name
     $typeMap = Get-FieldTypeMap $name
 
@@ -1490,7 +1495,7 @@ function Apply-ConflictResolutions {
         $name = $res.source_name
         $src = Get-SourceConfig $name
         $keyColumn = [string]$src.key_column
-        $records = $script:allData[$name]
+        $records = Read-SourceRecords $name
         foreach ($rec in $records) {
             $kv = ConvertTo-ShinsaString -Value (Get-ShinsaRecordValue -Record $rec -Name $keyColumn)
             if ($kv -ne $res.key_value) { continue }
@@ -1502,8 +1507,7 @@ function Apply-ConflictResolutions {
             Add-LogEntry ([pscustomobject]@{ ts = (Get-Date).ToString('o'); src = $name; key = $kv; field = $res.field; old = $res.original; new = $val; origin = $origin })
             break
         }
-        $jp = Join-Path $script:Paths.JsonRoot $src.file
-        Write-ShinsaJson -Path $jp -Data $records
+        Write-SourceRecords $name $records
     }
 }
 
@@ -1519,7 +1523,7 @@ function Invoke-Undo {
     $name = $entry.source
     $src = Get-SourceConfig $name
     $keyColumn = [string]$src.key_column
-    $records = $script:allData[$name]
+    $records = Read-SourceRecords $name
 
     foreach ($rec in $records) {
         $kv = ConvertTo-ShinsaString -Value (Get-ShinsaRecordValue -Record $rec -Name $keyColumn)
@@ -1528,8 +1532,7 @@ function Invoke-Undo {
         break
     }
 
-    $jp = Join-Path $script:Paths.JsonRoot $src.file
-    Write-ShinsaJson -Path $jp -Data $records
+    Write-SourceRecords $name $records
 
     $logPath = Join-Path $script:Paths.JsonRoot 'changelog.jsonl'
     Write-ShinsaChangeLog -LogPath $logPath -SourceName $name -KeyValue $entry.key -FieldName $entry.field `
@@ -1632,6 +1635,7 @@ function Load-ChangeLog {
 # =============================================================================
 
 $cmbSource.Add_SelectedIndexChanged({
+    Save-CurrentEdits
     $name = [string]$cmbSource.SelectedItem
     $txtFilter.Clear()
     Build-FieldEditors $name
@@ -1640,6 +1644,7 @@ $cmbSource.Add_SelectedIndexChanged({
 })
 
 $listRecords.Add_SelectedIndexChanged({
+    Save-CurrentEdits
     Update-Detail
 })
 
@@ -1647,8 +1652,6 @@ $listRecords.Add_DoubleClick({
     $name = [string]$cmbSource.SelectedItem
     $idx = $listRecords.SelectedIndex
     if (-not $name -or $idx -lt 0 -or $idx -ge $script:filteredIndices.Count) { return }
-    $recIdx = $script:filteredIndices[$idx]
-    $rec = $script:allData[$name][$recIdx]
     $sourcePath = Get-ShinsaSourcePath -Config $script:Config -SourceName $name
     if (-not [string]::IsNullOrWhiteSpace($sourcePath) -and (Test-Path $sourcePath)) {
         try { Start-Process $sourcePath } catch { }
@@ -1681,7 +1684,7 @@ $tsbSettings.Add_Click({ try { Show-SettingsDialog } catch { [System.Windows.For
 # Init
 # =============================================================================
 
-Load-AllData
+Reload-Cache
 Load-ChangeLog
 
 $script:initUiState = Get-UiState
@@ -1731,7 +1734,7 @@ $form.Add_Shown({
 
 $form.Add_FormClosing({
     $syncTimer.Stop()
-    try { Flush-EditorToMemory; Invoke-AutoReflect } catch { }
+    try { Save-CurrentEdits; Invoke-AutoReflect } catch { }
     Save-UiState
 })
 
