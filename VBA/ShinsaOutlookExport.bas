@@ -3,48 +3,45 @@ Option Explicit
 
 Private Const OLMSGUNICODE As Long = 9
 
-Public Function Shinsa_ExportRegisteredMailboxes(Optional ByVal appRoot As String = "") As Long
+Public Function Shinsa_ExportMail(ByVal exportRoot As String, ByVal stateFilePath As String, ByVal selfAddress As String) As Long
     On Error GoTo ErrHandler
 
-    Dim exportRoot As String
-    Dim accountsPath As String
-    Dim registered As Collection
+    Dim exported As Object
     Dim store As Outlook.Store
     Dim accountSmtp As String
     Dim exportedCount As Long
 
-    If Len(appRoot) = 0 Then
-        appRoot = "C:\workspace\dev\tools\shinsa"
+    If Len(exportRoot) = 0 Then
+        Err.Raise vbObjectError + 513, , "exportRoot is empty"
     End If
-
-    exportRoot = appRoot & "\data\source\mail"
-    accountsPath = appRoot & "\config\mail_accounts.txt"
+    If Len(selfAddress) = 0 Then
+        Err.Raise vbObjectError + 513, , "selfAddress is empty"
+    End If
 
     EnsureFolder exportRoot
-    Set registered = LoadRegisteredAccounts(accountsPath)
-    If registered.Count = 0 Then
-        Err.Raise vbObjectError + 513, , "No mailbox addresses found in " & accountsPath
-    End If
+    Set exported = LoadExportedIds(stateFilePath)
 
     exportedCount = 0
     For Each store In Application.Session.Stores
         accountSmtp = GetStoreSmtpAddress(store)
         If Len(accountSmtp) > 0 Then
-            If IsRegisteredAccount(registered, accountSmtp) Then
-                exportedCount = exportedCount + ExportFolderTree(store.GetRootFolder, exportRoot, accountSmtp)
+            If LCase$(accountSmtp) = LCase$(selfAddress) Then
+                exportedCount = exportedCount + ExportFolderTree(store.GetRootFolder, exportRoot, accountSmtp, exported)
             End If
         End If
     Next store
 
-    Shinsa_ExportRegisteredMailboxes = exportedCount
+    SaveExportedIds stateFilePath, exported
+
+    Shinsa_ExportMail = exportedCount
     Exit Function
 
 ErrHandler:
     MsgBox "Shinsa Outlook export failed: " & Err.Description, vbExclamation
-    Shinsa_ExportRegisteredMailboxes = 0
+    Shinsa_ExportMail = 0
 End Function
 
-Private Function ExportFolderTree(ByVal targetFolder As Outlook.Folder, ByVal exportRoot As String, ByVal accountSmtp As String) As Long
+Private Function ExportFolderTree(ByVal targetFolder As Outlook.Folder, ByVal exportRoot As String, ByVal accountSmtp As String, ByVal exported As Object) As Long
     On Error GoTo FolderError
 
     Dim folderRoot As String
@@ -67,13 +64,16 @@ Private Function ExportFolderTree(ByVal targetFolder As Outlook.Folder, ByVal ex
         Set currentItem = items(itemIndex)
         If TypeOf currentItem Is Outlook.MailItem Then
             Set mail = currentItem
-            ExportMailItem mail, folderRoot
-            total = total + 1
+            If Not exported.Exists(mail.EntryID) Then
+                ExportMailItem mail, folderRoot
+                exported.Add mail.EntryID, ""
+                total = total + 1
+            End If
         End If
     Next itemIndex
 
     For Each child In targetFolder.Folders
-        total = total + ExportFolderTree(child, exportRoot, accountSmtp)
+        total = total + ExportFolderTree(child, exportRoot, accountSmtp, exported)
     Next child
 
     ExportFolderTree = total
@@ -87,7 +87,6 @@ Private Sub ExportMailItem(ByVal mail As Outlook.MailItem, ByVal folderRoot As S
     On Error GoTo MailError
 
     Dim mailRoot As String
-    Dim attachmentsRoot As String
     Dim attachmentNames As Collection
     Dim metaPath As String
 
@@ -95,21 +94,19 @@ Private Sub ExportMailItem(ByVal mail As Outlook.MailItem, ByVal folderRoot As S
     metaPath = mailRoot & "\meta.json"
     If FileExists(metaPath) Then Exit Sub
 
-    attachmentsRoot = mailRoot & "\attachments"
     EnsureFolder mailRoot
-    EnsureFolder attachmentsRoot
 
     mail.SaveAs mailRoot & "\mail.msg", OLMSGUNICODE
     WriteTextFile mailRoot & "\body.txt", mail.Body
 
-    Set attachmentNames = SaveAttachments(mail, attachmentsRoot)
+    Set attachmentNames = SaveAttachments(mail, mailRoot)
     WriteMetaFile metaPath, mail, attachmentNames
     Exit Sub
 
 MailError:
 End Sub
 
-Private Function SaveAttachments(ByVal mail As Outlook.MailItem, ByVal attachmentsRoot As String) As Collection
+Private Function SaveAttachments(ByVal mail As Outlook.MailItem, ByVal mailRoot As String) As Collection
     Dim result As New Collection
     Dim i As Long
     Dim item As Outlook.Attachment
@@ -118,7 +115,7 @@ Private Function SaveAttachments(ByVal mail As Outlook.MailItem, ByVal attachmen
     For i = 1 To mail.Attachments.Count
         Set item = mail.Attachments(i)
         safeFileName = SafeName(item.FileName)
-        item.SaveAsFile attachmentsRoot & "\" & safeFileName
+        item.SaveAsFile mailRoot & "\" & safeFileName
         result.Add safeFileName
     Next i
 
@@ -143,6 +140,73 @@ Private Sub WriteMetaFile(ByVal path As String, ByVal mail As Outlook.MailItem, 
     WriteTextFile path, body
 End Sub
 
+' --- State file (exported EntryIDs) ---
+
+Private Function LoadExportedIds(ByVal path As String) As Object
+    Dim dict As Object
+    Dim lineText As String
+    Dim fileNumber As Integer
+    Dim allText As String
+    Dim entryId As String
+    Dim pos As Long, startPos As Long
+
+    Set dict = CreateObject("Scripting.Dictionary")
+
+    If Dir$(path) = "" Then
+        Set LoadExportedIds = dict
+        Exit Function
+    End If
+
+    fileNumber = FreeFile
+    Open path For Input As #fileNumber
+    allText = ""
+    Do Until EOF(fileNumber)
+        Line Input #fileNumber, lineText
+        allText = allText & lineText
+    Loop
+    Close #fileNumber
+
+    ' Parse JSON array of strings: ["id1","id2",...]
+    pos = 1
+    Do
+        pos = InStr(pos, allText, """")
+        If pos = 0 Then Exit Do
+        startPos = pos + 1
+        pos = InStr(startPos, allText, """")
+        If pos = 0 Then Exit Do
+        entryId = Mid$(allText, startPos, pos - startPos)
+        If Len(entryId) > 0 And Not dict.Exists(entryId) Then
+            dict.Add entryId, ""
+        End If
+        pos = pos + 1
+    Loop
+
+    Set LoadExportedIds = dict
+End Function
+
+Private Sub SaveExportedIds(ByVal path As String, ByVal dict As Object)
+    Dim fileNumber As Integer
+    Dim key As Variant
+    Dim first As Boolean
+
+    EnsureFolder CreateObject("Scripting.FileSystemObject").GetParentFolderName(path)
+
+    fileNumber = FreeFile
+    Open path For Output As #fileNumber
+    Print #fileNumber, "["
+    first = True
+    For Each key In dict.Keys
+        If Not first Then Print #fileNumber, ","
+        Print #fileNumber, "  """ & JsonEscape(CStr(key)) & """";
+        first = False
+    Next key
+    Print #fileNumber, ""
+    Print #fileNumber, "]"
+    Close #fileNumber
+End Sub
+
+' --- Helpers ---
+
 Private Function CollectionToJsonArray(ByVal values As Collection) As String
     Dim i As Long
     Dim text As String
@@ -156,41 +220,6 @@ Private Function CollectionToJsonArray(ByVal values As Collection) As String
     CollectionToJsonArray = text
 End Function
 
-Private Function LoadRegisteredAccounts(ByVal path As String) As Collection
-    Dim result As New Collection
-    Dim lineText As String
-    Dim fileNumber As Integer
-
-    If Dir$(path) = "" Then
-        Set LoadRegisteredAccounts = result
-        Exit Function
-    End If
-
-    fileNumber = FreeFile
-    Open path For Input As #fileNumber
-    Do Until EOF(fileNumber)
-        Line Input #fileNumber, lineText
-        lineText = Trim$(LCase$(lineText))
-        If Len(lineText) > 0 Then
-            If Left$(lineText, 1) <> "#" Then
-                result.Add lineText
-            End If
-        End If
-    Loop
-    Close #fileNumber
-
-    Set LoadRegisteredAccounts = result
-End Function
-
-Private Function IsRegisteredAccount(ByVal registered As Collection, ByVal accountSmtp As String) As Boolean
-    Dim item As Variant
-    For Each item In registered
-        If LCase$(CStr(item)) = LCase$(accountSmtp) Then
-            IsRegisteredAccount = True
-            Exit Function
-        End If
-    Next item
-End Function
 
 Private Function GetStoreSmtpAddress(ByVal store As Outlook.Store) As String
     Dim account As Outlook.Account

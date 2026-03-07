@@ -88,7 +88,8 @@ function Merge-ShinsaMap {
 function Read-ShinsaJson {
     param([Parameter(Mandatory = $true)][string]$Path)
 
-    Get-Content -Path $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+    $result = Get-Content -Path $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+    $result
 }
 
 function Write-ShinsaJson {

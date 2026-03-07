@@ -1,10 +1,10 @@
 {
   "sources": {
-    "anken": { "source_path": "data/sample/onedrive/table/anken.xlsx", "source_table": "T_anken" },
-    "contacts": { "source_path": "data/sample/onedrive/table/contacts.xlsx", "source_table": "T_contacts" },
-    "kenshu": { "source_path": "data/sample/onedrive/table/kenshu.xlsx", "source_table": "T_kenshu" },
+    "anken": { "source_path": "data/sample/table/anken.xlsx", "source_table": "T_anken" },
+    "contacts": { "source_path": "data/sample/table/contacts.xlsx", "source_table": "T_contacts" },
+    "kenshu": { "source_path": "data/sample/table/kenshu.xlsx", "source_table": "T_kenshu" },
     "mail": { "source_path": "data/sample/mail" },
-    "folder": { "source_path": "data/sample/onedrive/cases" }
+    "folder": { "source_path": "data/sample/cases" }
   },
   "mail": { "self_address": "reviewer@example.org" }
 }

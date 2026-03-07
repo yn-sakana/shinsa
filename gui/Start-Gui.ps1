@@ -188,10 +188,17 @@ function Get-DetailColumns {
 
 function Get-EditableColumns {
     param([string]$Name)
+    $src = Get-SourceConfig $Name
+    $srcMap = ConvertTo-ShinsaMap -InputObject $src
+    $keyCol = if ($srcMap.Contains('key_column')) { [string]$srcMap['key_column'] } else { '' }
     $fs = Ensure-FieldSettings $Name
-    $cols = @($fs.Keys | Where-Object { $fsm = ConvertTo-ShinsaMap -InputObject $fs[$_]; -not $fsm.Contains('editable') -or $fsm['editable'] -eq $true })
+    $cols = @($fs.Keys | Where-Object {
+        if ($_ -eq $keyCol -or $_ -like '_*') { return $false }
+        $fsm = ConvertTo-ShinsaMap -InputObject $fs[$_]
+        -not $fsm.Contains('editable') -or $fsm['editable'] -eq $true
+    })
     if ($cols.Count -gt 0) { return $cols }
-    return @(Get-DetailColumns $Name)
+    return @(Get-DetailColumns $Name | Where-Object { $_ -ne $keyCol -and $_ -notlike '_*' })
 }
 
 function Get-MultilineColumns {
@@ -245,11 +252,14 @@ function Save-CurrentEdits {
     $rec = $records[$recIdx]
 
     $changed = $false
+    $typeMap = Get-FieldTypeMap $name
     foreach ($fn in $editableCols) {
         if (-not $script:fieldEditors.ContainsKey($fn)) { continue }
         $newVal = $script:fieldEditors[$fn].Text.Trim()
-        $oldVal = ConvertTo-ShinsaString -Value (Get-ShinsaRecordValue -Record $rec -Name $fn)
-        if ($newVal -ne $oldVal) {
+        $rawVal = Get-ShinsaRecordValue -Record $rec -Name $fn
+        $ft = if ($typeMap.ContainsKey($fn)) { $typeMap[$fn] } else { 'text' }
+        $displayVal = Format-FieldValue $rawVal $ft
+        if ($newVal -ne $displayVal) {
             Set-ShinsaRecordValue -Record $rec -Name $fn -Value $newVal
             $changed = $true
         }
@@ -288,14 +298,18 @@ function Get-SnapshotDiffs {
     }
 
     $diffs = @()
+    $typeMap = Get-FieldTypeMap $SourceName
+    Write-DebugLog ("snapshotdiff: src={0} key={1} current={2} snap={3}" -f $SourceName, $keyColumn, $currentRecords.Count, $snapshotRecords.Count)
     foreach ($r in $currentRecords) {
         $k = ConvertTo-ShinsaString -Value (Get-ShinsaRecordValue -Record $r -Name $keyColumn)
         if (-not $k -or -not $snapByKey.ContainsKey($k)) { continue }
         $snapRec = $snapByKey[$k]
         foreach ($fn in $editableCols) {
-            $cur = ConvertTo-ShinsaString -Value (Get-ShinsaRecordValue -Record $r -Name $fn)
-            $snap = ConvertTo-ShinsaString -Value (Get-ShinsaRecordValue -Record $snapRec -Name $fn)
+            $ft = if ($typeMap.ContainsKey($fn)) { $typeMap[$fn] } else { 'text' }
+            $cur = Format-FieldValue (Get-ShinsaRecordValue -Record $r -Name $fn) $ft
+            $snap = Format-FieldValue (Get-ShinsaRecordValue -Record $snapRec -Name $fn) $ft
             if ($cur -ne $snap) {
+                Write-DebugLog ("snapshotdiff: DIFF key={0} field={1} snap=[{2}] cur=[{3}]" -f $k, $fn, $snap, $cur)
                 $diffs += @{ key = $k; field = $fn; old = $snap; new = $cur; row_id = (Get-ShinsaRecordValue -Record $r -Name '_source_row_id') }
             }
         }
@@ -310,12 +324,14 @@ function Invoke-AutoReflect {
     $logPath = Join-Path $script:Paths.JsonRoot 'changelog.jsonl'
     foreach ($name in (Get-ShinsaSourceNames -Config $script:Config)) {
         $diffs = @(Get-SnapshotDiffs $name)
+        Write-DebugLog ("reflect: src={0} diffs={1}" -f $name, $diffs.Count)
         if ($diffs.Count -eq 0) { continue }
 
         $src = Get-SourceConfig $name
         $srcMap = ConvertTo-ShinsaMap -InputObject $src
         $keyColumn = if ($srcMap.Contains('key_column')) { [string]$srcMap['key_column'] } else { '' }
         $sourcePath = Get-ShinsaSourcePath -Config $script:Config -SourceName $name
+        Write-DebugLog ("reflect: src={0} sourcePath={1} exists={2}" -f $name, $sourcePath, (Test-Path $sourcePath))
         if (-not $sourcePath -or -not (Test-Path $sourcePath)) { continue }
 
         # Build writeback plan from diffs
@@ -343,8 +359,11 @@ function Invoke-AutoReflect {
         }
 
         try {
+            Write-DebugLog ("reflect: writeback src={0} kind={1} changes={2}" -f $name, $ext, $changeCount)
             Invoke-ShinsaWriteback -Config $script:Config -SourceName $name -Plan $plan
+            Write-DebugLog ("reflect: writeback OK src={0}" -f $name)
         } catch {
+            Write-DebugLog ("reflect: writeback ERROR src={0} err={1}" -f $name, $_.Exception.Message)
             $statusBar.Text = "Reflect error ($name): $($_.Exception.Message)"
             continue
         }
@@ -379,13 +398,28 @@ function Invoke-GuiSync {
     $statusBar.Text = "Synced at $(Get-Date -Format 'HH:mm:ss')"
 }
 
+function Write-DebugLog {
+    param([string]$Msg)
+    $logFile = Join-Path $script:AppRoot 'gui_debug.log'
+    $line = "[{0}] {1}" -f (Get-Date -Format 'HH:mm:ss.fff'), $Msg
+    Add-Content -Path $logFile -Value $line -Encoding UTF8
+}
+
 function Invoke-PollCycle {
     $ts = Get-Date -Format 'HH:mm:ss'
 
     # 1. Save current edits to JSON
+    $editorCount = $script:fieldEditors.Count
+    $editableCols = if ($script:currentSourceName) { @(Get-EditableColumns $script:currentSourceName) } else { @() }
+    Write-DebugLog ("poll: dirty={0} src={1} idx={2} editors={3} editable={4}" -f $script:dirty, $script:currentSourceName, $script:currentRecordIndex, $editorCount, $editableCols.Count)
     $saved = Save-CurrentEdits
+    Write-DebugLog ("poll: saved={0}" -f $saved)
 
-    # 2. Check for remote changes
+    # 2. Reflect local edits to source (before sync, so diffs aren't lost)
+    $reflected = Invoke-AutoReflect
+    Write-DebugLog ("poll: reflected={0}" -f $reflected)
+
+    # 3. Check for remote changes
     $remoteChanged = $false
     foreach ($name in (Get-ShinsaSourceNames -Config $script:Config)) {
         $path = Get-ShinsaSourcePath -Config $script:Config -SourceName $name
@@ -396,19 +430,16 @@ function Invoke-PollCycle {
             try { (Get-ChildItem $path -Recurse -File -ErrorAction SilentlyContinue | Measure-Object -Property LastWriteTime -Maximum).Maximum } catch { $item.LastWriteTime }
         } else { $item.LastWriteTime }
         $lastKnown = $script:lastSourceTimestamps[$name]
-        if ($null -eq $lastKnown -or $itemTs -gt $lastKnown) {
+        if ($null -ne $lastKnown -and $itemTs -gt $lastKnown) {
             $remoteChanged = $true
             break
         }
     }
 
-    # 3. Sync remote → local (3-way merge preserves local edits)
+    # 4. Sync remote → local (3-way merge preserves local edits)
     if ($remoteChanged) {
         Invoke-GuiSync
     }
-
-    # 4. Auto-reflect: snapshot diff → Excel writeback + log
-    $reflected = Invoke-AutoReflect
 
     # 5. Update timestamps (after our own Excel writes)
     Initialize-SourceTimestamps
@@ -1578,6 +1609,7 @@ $syncTimer.Add_Tick({
         $syncTimer.Stop()
         Invoke-PollCycle
     } catch {
+        Write-DebugLog ("poll ERROR: {0}" -f $_.Exception.Message)
         $statusBar.Text = "Poll error: $($_.Exception.Message)"
     } finally {
         $syncTimer.Start()

@@ -1,3 +1,0 @@
-# one mailbox SMTP address per line
-# example:
-# grants@example.org

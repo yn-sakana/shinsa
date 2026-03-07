@@ -11,7 +11,7 @@
   },
   "sources": {
     "anken": {
-      "file": "anken.json",
+      "file": "anken/anken.json",
       "source_path": "",
       "source_table": "",
       "key_column": "基本_案件ID",
@@ -101,7 +101,7 @@
       "multiline_columns": ["審査_書類不備", "審査_公開メモ", "審査_内部メモ", "審査_指摘事項", "実績_成果概要", "事業_概要", "通知_備考", "通知_交付条件", "通知_変更内容", "金額_減額理由"]
     },
     "contacts": {
-      "file": "contacts.json",
+      "file": "contacts/contacts.json",
       "source_path": "",
       "source_table": "",
       "key_column": "contact_id",
@@ -123,7 +123,7 @@
       "multiline_columns": ["notes"]
     },
     "kenshu": {
-      "file": "kenshu.json",
+      "file": "kenshu/kenshu.json",
       "source_path": "",
       "source_table": "",
       "key_column": "training_id",
@@ -143,14 +143,14 @@
       "multiline_columns": ["remarks"]
     },
     "mail": {
-      "file": "mails.json",
+      "file": "anken/mails.json",
       "source_path": "",
       "view": "mail",
       "display_columns": ["received_at", "sender_email", "subject"],
       "join": { "source": "anken", "local_key": "sender_email", "foreign_key": "申請者_担当者メール", "match_mode": "exact" }
     },
     "folder": {
-      "file": "folders.json",
+      "file": "anken/folders.json",
       "source_path": "",
       "view": "tree",
       "display_columns": ["file_name"],
