@@ -90,11 +90,47 @@ function Test-HasGroups {
 }
 
 function Format-FieldValue {
-    param($Value)
+    param($Value, [string]$Type = 'text')
     if ($Value -is [System.Array] -or $Value -is [System.Collections.IList]) {
         return ($Value | ForEach-Object { [string]$_ }) -join '; '
     }
-    return ConvertTo-ShinsaString -Value $Value
+    $s = ConvertTo-ShinsaString -Value $Value
+    if ([string]::IsNullOrWhiteSpace($s)) { return $s }
+    switch ($Type) {
+        'date' {
+            $d = [datetime]::MinValue
+            if ([datetime]::TryParse($s, [ref]$d)) { return $d.ToString('yyyy/MM/dd') }
+        }
+        'number' {
+            $n = 0.0
+            if ([double]::TryParse($s, [ref]$n)) {
+                if ($n -eq [Math]::Floor($n)) { return ([long]$n).ToString('#,0') }
+                return $n.ToString('#,0.##')
+            }
+        }
+    }
+    return $s
+}
+
+function Get-FieldType {
+    param([string]$SourceName, [string]$FieldName)
+    $fs = Ensure-FieldSettings $SourceName
+    if ($fs.Count -eq 0) { return 'text' }
+    if (-not $fs.Contains($FieldName)) { return 'text' }
+    $m = ConvertTo-ShinsaMap -InputObject $fs[$FieldName]
+    if ($m.Contains('type')) { return [string]$m['type'] }
+    return 'text'
+}
+
+function Get-FieldTypeMap {
+    param([string]$SourceName)
+    $fs = Ensure-FieldSettings $SourceName
+    $map = @{}
+    foreach ($fn in $fs.Keys) {
+        $m = ConvertTo-ShinsaMap -InputObject $fs[$fn]
+        $map[$fn] = if ($m.Contains('type')) { [string]$m['type'] } else { 'text' }
+    }
+    return $map
 }
 
 function Get-SourceConfig {
@@ -941,7 +977,7 @@ function Build-JoinedTabs {
 # =============================================================================
 
 function Add-FieldEditorsToPanel {
-    param([System.Windows.Forms.Panel]$Panel, [string[]]$Fields, [string[]]$EditableCols, [string[]]$MultilineCols, [bool]$StripGroup)
+    param([System.Windows.Forms.Panel]$Panel, [string[]]$Fields, [string[]]$EditableCols, [string[]]$MultilineCols, [hashtable]$TypeMap, [bool]$StripGroup)
     $tip = New-Object System.Windows.Forms.ToolTip
 
     $tbl = New-Object System.Windows.Forms.TableLayoutPanel
@@ -982,6 +1018,8 @@ function Add-FieldEditorsToPanel {
         $isEditable = ($fieldName -in $EditableCols) -and ($fieldName -ne $keyCol)
         $txt.ReadOnly = (-not $isEditable)
         if ($txt.ReadOnly) { $txt.BackColor = [System.Drawing.Color]::FromArgb(240, 240, 240) }
+        $fType = if ($TypeMap -and $TypeMap.ContainsKey($fieldName)) { $TypeMap[$fieldName] } else { 'text' }
+        if ($fType -eq 'number') { $txt.TextAlign = 'Right' }
         if ($isMultiline) { $txt.Multiline = $true; $txt.ScrollBars = 'Vertical' }
         if ($isEditable) {
             $txt.Add_TextChanged({
@@ -1015,13 +1053,14 @@ function Build-FieldEditors {
 
     $editableCols = Get-EditableColumns $SourceName
     $multilineCols = Get-MultilineColumns $SourceName
+    $typeMap = Get-FieldTypeMap $SourceName
     $hasGroups = Test-HasGroups $fields
 
     if (-not $hasGroups) {
         # No grouping: render all fields in the Detail tab
         if (-not $tabs.TabPages.Contains($tabDetail)) { $tabs.TabPages.Insert(0, $tabDetail) }
         $tabDetail.Text = 'Detail'
-        Add-FieldEditorsToPanel -Panel $pnlFields -Fields $fields -EditableCols $editableCols -MultilineCols $multilineCols -StripGroup $false
+        Add-FieldEditorsToPanel -Panel $pnlFields -Fields $fields -EditableCols $editableCols -MultilineCols $multilineCols -TypeMap $typeMap -StripGroup $false
     } else {
         # Grouped: one tab per group, remove the Detail tab
         $tabs.TabPages.Remove($tabDetail)
@@ -1044,7 +1083,7 @@ function Build-FieldEditors {
             $gPanel.Padding = New-Object System.Windows.Forms.Padding(0, $script:M, 0, 0)
             $gTab.Controls.Add($gPanel)
 
-            Add-FieldEditorsToPanel -Panel $gPanel -Fields $gFields -EditableCols $editableCols -MultilineCols $multilineCols -StripGroup (-not $isUngrouped)
+            Add-FieldEditorsToPanel -Panel $gPanel -Fields $gFields -EditableCols $editableCols -MultilineCols $multilineCols -TypeMap $typeMap -StripGroup (-not $isUngrouped)
 
             $tabs.TabPages.Insert($tabIndex, $gTab)
             $script:fieldGroupTabs += $gTab
@@ -1062,9 +1101,12 @@ function Fill-FieldEditors {
             foreach ($txt in $script:fieldEditors.Values) { $txt.Text = '' }
             return
         }
+        $srcName = [string]$cmbSource.SelectedItem
+        $typeMap = if ($srcName) { Get-FieldTypeMap $srcName } else { @{} }
         foreach ($fn in $script:fieldEditors.Keys) {
             $val = Get-ShinsaRecordValue -Record $Record -Name $fn
-            $script:fieldEditors[$fn].Text = Format-FieldValue $val
+            $ft = if ($typeMap.ContainsKey($fn)) { $typeMap[$fn] } else { 'text' }
+            $script:fieldEditors[$fn].Text = Format-FieldValue $val $ft
         }
     } finally {
         $script:loading = $false
@@ -1208,6 +1250,7 @@ function Update-RecordList {
 
     $records = $script:allData[$name]
     $displayCols = Get-DisplayColumns $name
+    $typeMap = Get-FieldTypeMap $name
 
     $listRecords.BeginUpdate()
     $listRecords.Items.Clear()
@@ -1220,7 +1263,7 @@ function Update-RecordList {
             $allText = ($rec.PSObject.Properties | Where-Object { $_.Name -notlike '_*' } | ForEach-Object { Format-FieldValue $_.Value }) -join ' '
             if ($allText -notmatch [regex]::Escape($filter)) { continue }
         }
-        $label = ($displayCols | ForEach-Object { Format-FieldValue (Get-ShinsaRecordValue -Record $rec -Name $_) }) -join ' | '
+        $label = ($displayCols | ForEach-Object { $ft = if ($typeMap.ContainsKey($_)) { $typeMap[$_] } else { 'text' }; Format-FieldValue (Get-ShinsaRecordValue -Record $rec -Name $_) $ft }) -join ' | '
         $script:filteredIndices += $i
         [void]$listRecords.Items.Add($label)
     }

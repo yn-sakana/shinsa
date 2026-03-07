@@ -1192,12 +1192,12 @@ function Get-ShinsaEditableColumnNames {
         [Parameter(Mandatory = $true)]$Cache,
         [Parameter(Mandatory = $true)][string]$SourceName
     )
-    $src = $Config.sources[$SourceName]
-    $keyColumn = if ($null -ne $src.key_column) { [string]$src.key_column } else { '' }
+    $srcMap = ConvertTo-ShinsaMap -InputObject $Config.sources[$SourceName]
+    $keyColumn = if ($srcMap.Contains('key_column')) { [string]$srcMap['key_column'] } else { '' }
 
     $cols = @()
-    # From config
-    if ($null -ne $src.editable_columns) { $cols = @($src.editable_columns) }
+    # From config (if property exists)
+    if ($srcMap.Contains('editable_columns')) { $cols = @($srcMap['editable_columns']) }
 
     # Also from cache field_settings
     $fs = Get-ShinsaFieldSettings -Cache $Cache -SourceName $SourceName
