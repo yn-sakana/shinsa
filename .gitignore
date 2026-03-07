@@ -1,4 +1,3 @@
 config/config.local.json
-data/local/
+work/
 *.log
-*.xlsx
