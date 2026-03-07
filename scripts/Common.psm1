@@ -919,8 +919,8 @@ function Get-ShinsaWritebackPlan {
     )
 
     $src = $Config.sources[$SourceName]
-    $editableColumns = @()
-    if ($null -ne $src.editable_columns) { $editableColumns = @($src.editable_columns) }
+    $cache = Read-ShinsaCache -Paths $Paths
+    $editableColumns = @(Get-ShinsaEditableColumnNames -Config $Config -Cache $cache -SourceName $SourceName)
     if ($editableColumns.Count -eq 0) { throw "Source '$SourceName' has no editable columns." }
 
     $jsonPath = Join-Path $Paths.JsonRoot $src.file

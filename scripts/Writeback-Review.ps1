@@ -11,9 +11,12 @@ $paths = Get-ShinsaDataPaths -Config $config
 $sourceNames = Get-ShinsaSourceNames -Config $config
 $totalCases = 0
 
+$cache = Read-ShinsaCache -Paths $paths
+
 foreach ($name in $sourceNames) {
     $src = $config.sources[$name]
-    if ($null -eq $src.editable_columns -or @($src.editable_columns).Count -eq 0) { continue }
+    $editCols = @(Get-ShinsaEditableColumnNames -Config $config -Cache $cache -SourceName $name)
+    if ($editCols.Count -eq 0) { continue }
 
     $plan = Get-ShinsaWritebackPlan -Config $config -Paths $paths -SourceName $name
 
