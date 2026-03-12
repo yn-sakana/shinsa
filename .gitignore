@@ -2,3 +2,5 @@ config/config.local.json
 work/
 *.log
 ~$*
+.python/
+.venv/
