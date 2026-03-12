@@ -12,7 +12,26 @@
       "Bash(python3:*)",
       "Bash(python:*)",
       "Bash(command:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(git push:*)",
+      "Bash(git:*)",
+      "Bash(echo exit: $?:*)",
+      "Bash(::*)",
+      "Bash(claude:*)",
+      "Bash(reg add:*)",
+      "Bash(taskkill:*)",
+      "Read(//c/Users/ynisi/**)",
+      "Read(//c/Users/ynisi/Desktop/**)",
+      "Read(//c/Users/ynisi/Pictures/**)",
+      "Bash(tasklist:*)",
+      "Bash(gh auth:*)",
+      "Bash(wc:*)",
+      "Bash(cp:*)",
+      "Bash(ls:*)",
+      "Bash(for f in /c/workspace/dev/folio/sample/mail/*/meta.json)",
+      "Read(//c/workspace/dev/folio/sample/**)",
+      "Bash(done)",
+      "Bash(for f in /c/workspace/dev/folio/sample/mail/*/body.txt)"
     ]
   }
 }
